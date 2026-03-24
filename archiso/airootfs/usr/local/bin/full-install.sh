@@ -202,11 +202,93 @@ info "Microcode: $MICROCODE"
 success "Pré-requisitos validados."
 
 # ============================================================
-# 2. Configurar teclado
+# 2. Configurar teclado e regionalização
 # ============================================================
 
-loadkeys br-abnt2
-success "Teclado configurado (br-abnt2)."
+# Variáveis de regionalização (padrão: pt_BR)
+INSTALL_KEYMAP="br-abnt2"
+INSTALL_LOCALE="pt_BR.UTF-8"
+INSTALL_TIMEZONE="America/Sao_Paulo"
+
+echo ""
+echo -e "${BOLD}Configuração regional padrão:${NC}"
+echo -e "  Teclado:  ${BLUE}br-abnt2${NC}"
+echo -e "  Idioma:   ${BLUE}pt_BR.UTF-8${NC}"
+echo -e "  Timezone: ${BLUE}America/Sao_Paulo${NC}"
+echo ""
+read -rp "$(echo -e "${BOLD}Manter configuração padrão (pt_BR, teclado ABNT2)? [S/n]:${NC} ")" regional_choice
+
+if [[ "$regional_choice" =~ ^[nN]$ ]]; then
+    # Keymap
+    echo ""
+    echo -e "${BOLD}Keymaps comuns:${NC}"
+    echo -e "  ${GREEN}[1]${NC} br-abnt2 (Brasil ABNT2)"
+    echo -e "  ${GREEN}[2]${NC} us (EUA - Internacional)"
+    echo -e "  ${GREEN}[3]${NC} uk (Reino Unido)"
+    echo -e "  ${GREEN}[4]${NC} de (Alemanha)"
+    echo -e "  ${GREEN}[5]${NC} fr (França)"
+    echo -e "  ${GREEN}[6]${NC} Outro (digitar manualmente)"
+    echo ""
+    read -rp "$(echo -e "${BOLD}Keymap [1-6]:${NC} ")" keymap_choice
+    case "$keymap_choice" in
+        1) INSTALL_KEYMAP="br-abnt2" ;;
+        2) INSTALL_KEYMAP="us" ;;
+        3) INSTALL_KEYMAP="uk" ;;
+        4) INSTALL_KEYMAP="de" ;;
+        5) INSTALL_KEYMAP="fr" ;;
+        6) read -rp "$(echo -e "${BOLD}Digite o keymap:${NC} ")" INSTALL_KEYMAP ;;
+        *) INSTALL_KEYMAP="br-abnt2" ;;
+    esac
+
+    # Locale
+    echo ""
+    echo -e "${BOLD}Locales comuns:${NC}"
+    echo -e "  ${GREEN}[1]${NC} pt_BR.UTF-8 (Português Brasil)"
+    echo -e "  ${GREEN}[2]${NC} en_US.UTF-8 (Inglês EUA)"
+    echo -e "  ${GREEN}[3]${NC} en_GB.UTF-8 (Inglês UK)"
+    echo -e "  ${GREEN}[4]${NC} es_ES.UTF-8 (Espanhol)"
+    echo -e "  ${GREEN}[5]${NC} de_DE.UTF-8 (Alemão)"
+    echo -e "  ${GREEN}[6]${NC} Outro (digitar manualmente)"
+    echo ""
+    read -rp "$(echo -e "${BOLD}Locale [1-6]:${NC} ")" locale_choice
+    case "$locale_choice" in
+        1) INSTALL_LOCALE="pt_BR.UTF-8" ;;
+        2) INSTALL_LOCALE="en_US.UTF-8" ;;
+        3) INSTALL_LOCALE="en_GB.UTF-8" ;;
+        4) INSTALL_LOCALE="es_ES.UTF-8" ;;
+        5) INSTALL_LOCALE="de_DE.UTF-8" ;;
+        6) read -rp "$(echo -e "${BOLD}Digite o locale (ex: fr_FR.UTF-8):${NC} ")" INSTALL_LOCALE ;;
+        *) INSTALL_LOCALE="pt_BR.UTF-8" ;;
+    esac
+
+    # Timezone
+    echo ""
+    echo -e "${BOLD}Timezones comuns:${NC}"
+    echo -e "  ${GREEN}[1]${NC} America/Sao_Paulo"
+    echo -e "  ${GREEN}[2]${NC} America/New_York"
+    echo -e "  ${GREEN}[3]${NC} America/Chicago"
+    echo -e "  ${GREEN}[4]${NC} America/Los_Angeles"
+    echo -e "  ${GREEN}[5]${NC} Europe/London"
+    echo -e "  ${GREEN}[6]${NC} Europe/Berlin"
+    echo -e "  ${GREEN}[7]${NC} Outro (digitar manualmente)"
+    echo ""
+    read -rp "$(echo -e "${BOLD}Timezone [1-7]:${NC} ")" tz_choice
+    case "$tz_choice" in
+        1) INSTALL_TIMEZONE="America/Sao_Paulo" ;;
+        2) INSTALL_TIMEZONE="America/New_York" ;;
+        3) INSTALL_TIMEZONE="America/Chicago" ;;
+        4) INSTALL_TIMEZONE="America/Los_Angeles" ;;
+        5) INSTALL_TIMEZONE="Europe/London" ;;
+        6) INSTALL_TIMEZONE="Europe/Berlin" ;;
+        7) read -rp "$(echo -e "${BOLD}Digite o timezone (ex: Asia/Tokyo):${NC} ")" INSTALL_TIMEZONE ;;
+        *) INSTALL_TIMEZONE="America/Sao_Paulo" ;;
+    esac
+fi
+
+info "Keymap: $INSTALL_KEYMAP | Locale: $INSTALL_LOCALE | Timezone: $INSTALL_TIMEZONE"
+
+loadkeys "$INSTALL_KEYMAP"
+success "Teclado configurado ($INSTALL_KEYMAP)."
 
 # ============================================================
 # 3. Selecionar disco
@@ -488,15 +570,16 @@ done
 info "Configurando o sistema via chroot..."
 
 # Timezone
-arch-chroot /mnt ln -sf /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime
+arch-chroot /mnt ln -sf "/usr/share/zoneinfo/$INSTALL_TIMEZONE" /etc/localtime
 arch-chroot /mnt hwclock --systohc
 
 # Locale
+LOCALE_PREFIX="${INSTALL_LOCALE%%.*}"  # ex: pt_BR
 sed -i 's/^#en_US.UTF-8/en_US.UTF-8/' /mnt/etc/locale.gen
-sed -i 's/^#pt_BR.UTF-8/pt_BR.UTF-8/' /mnt/etc/locale.gen
+sed -i "s/^#${LOCALE_PREFIX}/${LOCALE_PREFIX}/" /mnt/etc/locale.gen
 arch-chroot /mnt locale-gen >> "$LOG_FILE" 2>&1
-echo "LANG=pt_BR.UTF-8" > /mnt/etc/locale.conf
-echo "KEYMAP=br-abnt2" > /mnt/etc/vconsole.conf
+echo "LANG=$INSTALL_LOCALE" > /mnt/etc/locale.conf
+echo "KEYMAP=$INSTALL_KEYMAP" > /mnt/etc/vconsole.conf
 
 # Hostname
 echo "$INSTALL_HOSTNAME" > /mnt/etc/hostname
