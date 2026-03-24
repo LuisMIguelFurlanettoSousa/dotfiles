@@ -249,7 +249,20 @@ echo ""
 echo -e "${YELLOW}As seguintes partições serão formatadas:${NC}"
 echo -e "  Root: ${BOLD}$PART_ROOT${NC} → ext4"
 [ -n "$PART_SWAP" ] && echo -e "  Swap: ${BOLD}$PART_SWAP${NC} → swap"
-[ -n "$PART_EFI" ] && echo -e "  EFI:  ${BOLD}$PART_EFI${NC} → FAT32"
+
+FORMAT_EFI="n"
+if [ -n "$PART_EFI" ]; then
+    echo ""
+    echo -e "${YELLOW}A partição EFI (${PART_EFI}) já pode conter bootloaders de outros sistemas.${NC}"
+    echo -e "${YELLOW}Se você tem Windows ou outro SO, ${RED}${BOLD}NÃO formate${NC}${YELLOW} a EFI.${NC}"
+    read -rp "$(echo -e "${BOLD}Formatar a partição EFI? [s/N]:${NC} ")" FORMAT_EFI
+    if [[ "$FORMAT_EFI" =~ ^[sS]$ ]]; then
+        echo -e "  EFI:  ${BOLD}$PART_EFI${NC} → FAT32 (será formatada)"
+    else
+        echo -e "  EFI:  ${BOLD}$PART_EFI${NC} → manter existente (não formatar)"
+    fi
+fi
+
 echo ""
 read -rp "$(echo -e "${BOLD}Confirmar formatação? [s/N]:${NC} ")" fmt_confirm
 if [[ ! "$fmt_confirm" =~ ^[sS]$ ]]; then
@@ -268,8 +281,12 @@ if [ -n "$PART_SWAP" ]; then
 fi
 
 if [ -n "$PART_EFI" ]; then
-    mkfs.fat -F 32 "$PART_EFI" >> "$LOG_FILE" 2>&1
-    success "EFI formatado (FAT32)."
+    if [[ "$FORMAT_EFI" =~ ^[sS]$ ]]; then
+        mkfs.fat -F 32 "$PART_EFI" >> "$LOG_FILE" 2>&1
+        success "EFI formatado (FAT32)."
+    else
+        success "EFI mantida sem formatar."
+    fi
 fi
 
 # ============================================================
