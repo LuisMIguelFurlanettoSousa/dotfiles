@@ -241,10 +241,9 @@ PACMAN_PKGS=(
     hyprland
     hyprlock
     xdg-desktop-portal-hyprland
-    # Barra, menu, logout
+    # Barra e menu
     waybar
     wofi
-    wlogout
     # Utilitários Wayland
     grim
     slurp
@@ -300,6 +299,7 @@ AUR_PKGS=(
     visual-studio-code-bin
     bibata-cursor-theme
     ttf-jetbrains-mono-nerd
+    wlogout
 )
 
 # AUR: instalar um por um com fallback (se um falhar, os outros continuam)
