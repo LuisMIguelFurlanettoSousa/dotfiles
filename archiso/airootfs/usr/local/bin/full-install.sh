@@ -75,8 +75,103 @@ if [ ! -d /run/archiso ]; then
     error "Este script deve ser executado a partir da ISO live do Arch Linux."
 fi
 
+# Verificar conexão — se não tiver, oferecer Wi-Fi
 if ! curl -sf --max-time 10 "https://archlinux.org" > /dev/null 2>&1; then
-    error "Sem conexão com a internet. Conecte-se via 'nmtui' ou 'iwctl' e tente novamente."
+    warn "Sem conexão com a internet."
+    echo ""
+    echo -e "${BOLD}Como deseja conectar?${NC}"
+    echo -e "  ${GREEN}[1]${NC} Wi-Fi"
+    echo -e "  ${BLUE}[2]${NC} Já estou com cabo ethernet (tentar novamente)"
+    echo -e "  ${YELLOW}[3]${NC} Cancelar"
+    echo ""
+    read -rp "$(echo -e "${BOLD}Opção [1-3]:${NC} ")" net_choice
+
+    case "$net_choice" in
+        1)
+            # Listar redes Wi-Fi disponíveis
+            info "Buscando redes Wi-Fi..."
+
+            # Garantir que o iwd está rodando
+            systemctl start iwd 2>/dev/null || true
+            sleep 2
+
+            # Detectar interface wireless
+            WIFI_DEV=$(iwctl device list 2>/dev/null | awk '/station/{print $2}' | head -1)
+            if [ -z "$WIFI_DEV" ]; then
+                # Fallback: pegar qualquer interface wlan
+                WIFI_DEV=$(ip link show | grep -oP 'wlan\d+|wlp\S+' | head -1)
+            fi
+
+            if [ -z "$WIFI_DEV" ]; then
+                error "Nenhuma interface Wi-Fi encontrada. Use cabo ethernet."
+            fi
+
+            info "Interface Wi-Fi: $WIFI_DEV"
+
+            # Escanear redes
+            iwctl station "$WIFI_DEV" scan 2>/dev/null
+            sleep 3
+
+            # Listar redes disponíveis
+            echo ""
+            echo -e "${BOLD}Redes Wi-Fi disponíveis:${NC}"
+            echo ""
+            mapfile -t NETWORKS < <(iwctl station "$WIFI_DEV" get-networks 2>/dev/null | grep -E '^\s+' | awk '{$1=$1};1' | grep -v '^-' | grep -v 'Network name' | grep -v '^\s*$' | sed 's/\x1b\[[0-9;]*m//g' | awk '{print $1}')
+
+            if [ ${#NETWORKS[@]} -eq 0 ]; then
+                # Fallback: mostrar saída bruta do iwctl
+                echo -e "${YELLOW}Não foi possível listar automaticamente. Mostrando saída bruta:${NC}"
+                iwctl station "$WIFI_DEV" get-networks 2>/dev/null
+                echo ""
+                read -rp "$(echo -e "${BOLD}Digite o nome da rede Wi-Fi:${NC} ")" WIFI_SSID
+            else
+                for i in "${!NETWORKS[@]}"; do
+                    echo -e "  ${GREEN}[$((i+1))]${NC} ${NETWORKS[$i]}"
+                done
+                echo ""
+                read -rp "$(echo -e "${BOLD}Selecione a rede [1-${#NETWORKS[@]}]:${NC} ")" wifi_choice
+
+                if [[ "$wifi_choice" =~ ^[0-9]+$ ]] && [ "$wifi_choice" -ge 1 ] && [ "$wifi_choice" -le ${#NETWORKS[@]} ]; then
+                    WIFI_SSID="${NETWORKS[$((wifi_choice-1))]}"
+                else
+                    read -rp "$(echo -e "${BOLD}Opção inválida. Digite o nome da rede manualmente:${NC} ")" WIFI_SSID
+                fi
+            fi
+
+            # Pedir senha
+            echo ""
+            read -rsp "$(echo -e "${BOLD}Senha do Wi-Fi ($WIFI_SSID):${NC} ")" WIFI_PASS
+            echo ""
+
+            # Conectar
+            info "Conectando a '$WIFI_SSID'..."
+            iwctl --passphrase "$WIFI_PASS" station "$WIFI_DEV" connect "$WIFI_SSID" 2>/dev/null
+
+            # Aguardar conexão
+            sleep 5
+
+            # Verificar
+            if curl -sf --max-time 10 "https://archlinux.org" > /dev/null 2>&1; then
+                success "Conectado ao Wi-Fi '$WIFI_SSID'."
+            else
+                error "Falha ao conectar ao Wi-Fi. Verifique o nome da rede e a senha."
+            fi
+            ;;
+        2)
+            info "Tentando novamente..."
+            sleep 3
+            if ! curl -sf --max-time 10 "https://archlinux.org" > /dev/null 2>&1; then
+                error "Ainda sem internet. Verifique o cabo ethernet."
+            fi
+            success "Conectado via ethernet."
+            ;;
+        3)
+            error "Instalação cancelada. Sem internet não é possível instalar."
+            ;;
+        *)
+            error "Opção inválida."
+            ;;
+    esac
 fi
 
 if [ -d /sys/firmware/efi/efivars ]; then
