@@ -341,7 +341,10 @@ case "$part_choice" in
         fi
 
         RAM_GB=$(awk '/MemTotal/ {printf "%d", $2/1024/1024}' /proc/meminfo)
-        if [ "$RAM_GB" -le 8 ]; then
+        # Mínimo 1G, máximo 8G
+        if [ "$RAM_GB" -le 0 ]; then
+            SWAP_SIZE="1G"
+        elif [ "$RAM_GB" -le 8 ]; then
             SWAP_SIZE="${RAM_GB}G"
         else
             SWAP_SIZE="8G"
@@ -359,6 +362,10 @@ case "$part_choice" in
             sgdisk -n 2:0:+${SWAP_SIZE} -t 2:8200 -c 2:"Swap" "$TARGET_DISK" >> "$LOG_FILE" 2>&1
             sgdisk -n 3:0:0 -t 3:8300 -c 3:"Root" "$TARGET_DISK" >> "$LOG_FILE" 2>&1
         fi
+
+        # Forçar kernel a reler tabela de partições
+        partprobe "$TARGET_DISK" 2>/dev/null || true
+        sleep 2
 
         if [[ "$TARGET_DISK" == *"nvme"* ]] || [[ "$TARGET_DISK" == *"mmcblk"* ]]; then
             PART_SUFFIX="p"
@@ -495,7 +502,16 @@ fi
 # ============================================================
 
 info "Configurando mirrors (Brasil)..."
-reflector --country Brazil --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist >> "$LOG_FILE" 2>&1
+reflector --country Brazil --age 24 --protocol https --sort rate --save /etc/pacman.d/mirrorlist >> "$LOG_FILE" 2>&1 || {
+    warn "Reflector falhou para Brasil. Usando mirrors globais..."
+    reflector --age 24 --protocol https --sort rate --number 10 --save /etc/pacman.d/mirrorlist >> "$LOG_FILE" 2>&1 || {
+        warn "Reflector falhou completamente. Usando mirrorlist padrão da ISO."
+    }
+}
+# Verificar que o mirrorlist não está vazio
+if [ ! -s /etc/pacman.d/mirrorlist ]; then
+    error "mirrorlist está vazio. Verifique sua conexão com a internet."
+fi
 success "Mirrors configurados."
 
 # ============================================================
@@ -506,7 +522,7 @@ success "Mirrors configurados."
 info "Instalando sistema base (pacstrap)..."
 pacstrap -K /mnt base linux linux-firmware linux-headers \
     "$MICROCODE" networkmanager grub efibootmgr os-prober \
-    git base-devel sudo zsh >> "$LOG_FILE" 2>&1
+    git base-devel sudo zsh pciutils >> "$LOG_FILE" 2>&1
 success "Sistema base instalado."
 
 # ============================================================
@@ -584,6 +600,13 @@ echo "KEYMAP=$INSTALL_KEYMAP" > /mnt/etc/vconsole.conf
 # Hostname
 echo "$INSTALL_HOSTNAME" > /mnt/etc/hostname
 
+# Hosts
+cat > /mnt/etc/hosts << HOSTS
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   ${INSTALL_HOSTNAME}.localdomain ${INSTALL_HOSTNAME}
+HOSTS
+
 # Senha do root
 echo "root:${ROOT_PASS}" | arch-chroot /mnt chpasswd
 
@@ -610,8 +633,12 @@ else
     arch-chroot /mnt grub-install --target=i386-pc "$TARGET_DISK" >> "$LOG_FILE" 2>&1
 fi
 
-# Habilitar os-prober
-sed -i 's/^#GRUB_DISABLE_OS_PROBER=false/GRUB_DISABLE_OS_PROBER=false/' /mnt/etc/default/grub
+# Habilitar os-prober (descomentar se existir, adicionar se não existir)
+if grep -q "GRUB_DISABLE_OS_PROBER" /mnt/etc/default/grub; then
+    sed -i 's/^#\?GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /mnt/etc/default/grub
+else
+    echo "GRUB_DISABLE_OS_PROBER=false" >> /mnt/etc/default/grub
+fi
 
 arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg >> "$LOG_FILE" 2>&1
 success "GRUB instalado e configurado."
@@ -625,12 +652,19 @@ if [ -d /opt/dotfiles ]; then
     arch-chroot /mnt chown -R "${INSTALL_USER}:${INSTALL_USER}" "/home/${INSTALL_USER}/dotfiles"
     success "Dotfiles copiados para /home/${INSTALL_USER}/dotfiles."
 
+    # Adicionar NOPASSWD temporário para o install.sh poder usar sudo no chroot
+    echo "${INSTALL_USER} ALL=(ALL:ALL) NOPASSWD: ALL" > /mnt/etc/sudoers.d/99-install-nopasswd
+    chmod 440 /mnt/etc/sudoers.d/99-install-nopasswd
+
     # Executar install.sh como o usuário (não como root)
     info "Executando install.sh (pós-instalação)..."
     arch-chroot /mnt runuser -u "$INSTALL_USER" -- /home/"$INSTALL_USER"/dotfiles/install.sh >> "$LOG_FILE" 2>&1 || {
         warn "install.sh retornou erro. Verifique o log: $LOG_FILE"
         warn "Você pode rodar manualmente após o reboot: cd ~/dotfiles && ./install.sh"
     }
+
+    # Remover NOPASSWD temporário (segurança)
+    rm -f /mnt/etc/sudoers.d/99-install-nopasswd
 else
     warn "/opt/dotfiles não encontrado. Pule a pós-instalação."
     warn "Após o reboot, clone os dotfiles e rode ./install.sh manualmente."
