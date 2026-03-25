@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
+# Nota: NÃO usar set -e. O controle de erros é feito manualmente
+# para evitar que pipefail + tee matem o script em falsos positivos.
 
 # ============================================================
 # Full Install — Instalação base do Arch Linux
@@ -28,34 +30,27 @@ success() { echo -e "${GREEN}[OK]${NC} $1" | tee -a "$LOG_FILE"; }
 warn()    { echo -e "${YELLOW}[AVISO]${NC} $1" | tee -a "$LOG_FILE"; }
 error()   { echo -e "${RED}[ERRO]${NC} $1" | tee -a "$LOG_FILE"; exit 1; }
 
+# Função para rodar comando, mostrar saída na tela E no log, e abortar se falhar
+run() {
+    local desc="$1"
+    shift
+    info "$desc"
+    if ! "$@" 2>&1 | tee -a "$LOG_FILE"; then
+        error "$desc falhou. Verifique o log: $LOG_FILE"
+    fi
+}
+
+echo "=== Instalação iniciada em $(date) ===" > "$LOG_FILE"
+
 # ============================================================
-# Trap de erro
+# Cleanup em caso de erro (trap)
 # ============================================================
 
-trap_error() {
-    local exit_code=$?
-    local line_number=$1
-    local failed_command="${BASH_COMMAND}"
-    echo "" | tee -a "$LOG_FILE"
-    echo -e "${RED}╔══════════════════════════════════════════╗${NC}" | tee -a "$LOG_FILE"
-    echo -e "${RED}║  ERRO FATAL — instalação interrompida    ║${NC}" | tee -a "$LOG_FILE"
-    echo -e "${RED}╚══════════════════════════════════════════╝${NC}" | tee -a "$LOG_FILE"
-    echo -e "${RED}Linha:${NC} $line_number" | tee -a "$LOG_FILE"
-    echo -e "${RED}Comando:${NC} $failed_command" | tee -a "$LOG_FILE"
-    echo -e "${RED}Código de saída:${NC} $exit_code" | tee -a "$LOG_FILE"
-    echo -e "${RED}Log:${NC} $LOG_FILE" | tee -a "$LOG_FILE"
-    echo "" | tee -a "$LOG_FILE"
-    echo -e "${YELLOW}Verifique as últimas linhas do log:${NC}" | tee -a "$LOG_FILE"
-    echo -e "  ${BOLD}tail -50 $LOG_FILE${NC}" | tee -a "$LOG_FILE"
-
-    # Tentar desmontar caso tenha falhado no meio
+cleanup() {
     umount -R /mnt 2>/dev/null || true
     swapoff -a 2>/dev/null || true
 }
-
-trap 'trap_error ${LINENO}' ERR
-
-echo "=== Instalação iniciada em $(date) ===" > "$LOG_FILE"
+trap cleanup EXIT
 
 # ============================================================
 # Variáveis globais (preenchidas durante a execução)
@@ -69,6 +64,9 @@ PART_ROOT=""
 INSTALL_USER=""
 INSTALL_HOSTNAME=""
 MICROCODE=""
+INSTALL_KEYMAP="br-abnt2"
+INSTALL_LOCALE="pt_BR.UTF-8"
+INSTALL_TIMEZONE="America/Sao_Paulo"
 
 # ============================================================
 # 1. Validar pré-requisitos
@@ -93,68 +91,45 @@ if ! curl -sf --max-time 10 "https://archlinux.org" > /dev/null 2>&1; then
 
     case "$net_choice" in
         1)
-            # Listar redes Wi-Fi disponíveis
             info "Buscando redes Wi-Fi..."
-
-            # Garantir que o iwd está rodando
             systemctl start iwd 2>/dev/null || true
             sleep 2
 
             # Detectar interface wireless
             WIFI_DEV=$(iwctl device list 2>/dev/null | awk '/station/{print $2}' | head -1)
-            if [ -z "$WIFI_DEV" ]; then
-                # Fallback: pegar qualquer interface wlan
-                WIFI_DEV=$(ip link show | grep -oP 'wlan\d+|wlp\S+' | head -1)
+            if [ -z "${WIFI_DEV:-}" ]; then
+                WIFI_DEV=$(ip link show 2>/dev/null | grep -oP 'wlan\d+|wlp\S+' | head -1 || true)
             fi
-
-            if [ -z "$WIFI_DEV" ]; then
+            if [ -z "${WIFI_DEV:-}" ]; then
                 error "Nenhuma interface Wi-Fi encontrada. Use cabo ethernet."
             fi
-
             info "Interface Wi-Fi: $WIFI_DEV"
 
-            # Escanear redes
-            iwctl station "$WIFI_DEV" scan 2>/dev/null
+            iwctl station "$WIFI_DEV" scan 2>/dev/null || true
             sleep 3
 
-            # Listar redes disponíveis
             echo ""
             echo -e "${BOLD}Redes Wi-Fi disponíveis:${NC}"
             echo ""
-            mapfile -t NETWORKS < <(iwctl station "$WIFI_DEV" get-networks 2>/dev/null | grep -E '^\s+' | awk '{$1=$1};1' | grep -v '^-' | grep -v 'Network name' | grep -v '^\s*$' | sed 's/\x1b\[[0-9;]*m//g' | awk '{print $1}')
 
-            if [ ${#NETWORKS[@]} -eq 0 ]; then
-                # Fallback: mostrar saída bruta do iwctl
-                echo -e "${YELLOW}Não foi possível listar automaticamente. Mostrando saída bruta:${NC}"
-                iwctl station "$WIFI_DEV" get-networks 2>/dev/null
-                echo ""
-                read -rp "$(echo -e "${BOLD}Digite o nome da rede Wi-Fi:${NC} ")" WIFI_SSID
-            else
-                for i in "${!NETWORKS[@]}"; do
-                    echo -e "  ${GREEN}[$((i+1))]${NC} ${NETWORKS[$i]}"
-                done
-                echo ""
-                read -rp "$(echo -e "${BOLD}Selecione a rede [1-${#NETWORKS[@]}]:${NC} ")" wifi_choice
+            # Mostrar saída bruta do iwctl (o parsing de SSIDs com espaços é frágil)
+            iwctl station "$WIFI_DEV" get-networks 2>/dev/null || true
+            echo ""
+            read -rp "$(echo -e "${BOLD}Digite o nome exato da rede Wi-Fi:${NC} ")" WIFI_SSID
 
-                if [[ "$wifi_choice" =~ ^[0-9]+$ ]] && [ "$wifi_choice" -ge 1 ] && [ "$wifi_choice" -le ${#NETWORKS[@]} ]; then
-                    WIFI_SSID="${NETWORKS[$((wifi_choice-1))]}"
-                else
-                    read -rp "$(echo -e "${BOLD}Opção inválida. Digite o nome da rede manualmente:${NC} ")" WIFI_SSID
-                fi
+            if [ -z "${WIFI_SSID:-}" ]; then
+                error "Nome da rede não pode ser vazio."
             fi
 
-            # Pedir senha com 3 tentativas
-            WIFI_TENTATIVAS=3
+            # 3 tentativas de senha
             WIFI_CONECTADO=false
-
-            for tentativa in $(seq 1 $WIFI_TENTATIVAS); do
+            for tentativa in 1 2 3; do
                 echo ""
-                read -rsp "$(echo -e "${BOLD}Senha do Wi-Fi ($WIFI_SSID) [tentativa $tentativa/$WIFI_TENTATIVAS]:${NC} ")" WIFI_PASS
+                read -rsp "$(echo -e "${BOLD}Senha do Wi-Fi ($WIFI_SSID) [tentativa $tentativa/3]:${NC} ")" WIFI_PASS
                 echo ""
 
                 info "Conectando a '$WIFI_SSID'..."
-                iwctl --passphrase "$WIFI_PASS" station "$WIFI_DEV" connect "$WIFI_SSID" 2>/dev/null
-
+                iwctl --passphrase "$WIFI_PASS" station "$WIFI_DEV" connect "$WIFI_SSID" 2>/dev/null || true
                 sleep 5
 
                 if curl -sf --max-time 10 "https://archlinux.org" > /dev/null 2>&1; then
@@ -162,14 +137,12 @@ if ! curl -sf --max-time 10 "https://archlinux.org" > /dev/null 2>&1; then
                     WIFI_CONECTADO=true
                     break
                 else
-                    if [ "$tentativa" -lt "$WIFI_TENTATIVAS" ]; then
-                        warn "Falha ao conectar. Verifique a senha e tente novamente."
-                    fi
+                    warn "Falha ao conectar. Verifique a senha e tente novamente."
                 fi
             done
 
             if [ "$WIFI_CONECTADO" = false ]; then
-                error "Falha ao conectar ao Wi-Fi após $WIFI_TENTATIVAS tentativas."
+                error "Falha ao conectar ao Wi-Fi após 3 tentativas."
             fi
             ;;
         2)
@@ -181,7 +154,7 @@ if ! curl -sf --max-time 10 "https://archlinux.org" > /dev/null 2>&1; then
             success "Conectado via ethernet."
             ;;
         3)
-            error "Instalação cancelada. Sem internet não é possível instalar."
+            error "Instalação cancelada."
             ;;
         *)
             error "Opção inválida."
@@ -197,7 +170,7 @@ else
     info "Modo de boot: BIOS/Legacy"
 fi
 
-if lscpu | grep -qi "GenuineIntel"; then
+if lscpu 2>/dev/null | grep -qi "GenuineIntel"; then
     MICROCODE="intel-ucode"
 else
     MICROCODE="amd-ucode"
@@ -210,11 +183,6 @@ success "Pré-requisitos validados."
 # 2. Configurar teclado e regionalização
 # ============================================================
 
-# Variáveis de regionalização (padrão: pt_BR)
-INSTALL_KEYMAP="br-abnt2"
-INSTALL_LOCALE="pt_BR.UTF-8"
-INSTALL_TIMEZONE="America/Sao_Paulo"
-
 echo ""
 echo -e "${BOLD}Configuração regional padrão:${NC}"
 echo -e "  Teclado:  ${BLUE}br-abnt2${NC}"
@@ -223,8 +191,7 @@ echo -e "  Timezone: ${BLUE}America/Sao_Paulo${NC}"
 echo ""
 read -rp "$(echo -e "${BOLD}Manter configuração padrão (pt_BR, teclado ABNT2)? [S/n]:${NC} ")" regional_choice
 
-if [[ "$regional_choice" =~ ^[nN]$ ]]; then
-    # Keymap
+if [[ "${regional_choice:-}" =~ ^[nN]$ ]]; then
     echo ""
     echo -e "${BOLD}Keymaps comuns:${NC}"
     echo -e "  ${GREEN}[1]${NC} br-abnt2 (Brasil ABNT2)"
@@ -235,7 +202,7 @@ if [[ "$regional_choice" =~ ^[nN]$ ]]; then
     echo -e "  ${GREEN}[6]${NC} Outro (digitar manualmente)"
     echo ""
     read -rp "$(echo -e "${BOLD}Keymap [1-6]:${NC} ")" keymap_choice
-    case "$keymap_choice" in
+    case "${keymap_choice:-1}" in
         1) INSTALL_KEYMAP="br-abnt2" ;;
         2) INSTALL_KEYMAP="us" ;;
         3) INSTALL_KEYMAP="uk" ;;
@@ -245,7 +212,6 @@ if [[ "$regional_choice" =~ ^[nN]$ ]]; then
         *) INSTALL_KEYMAP="br-abnt2" ;;
     esac
 
-    # Locale
     echo ""
     echo -e "${BOLD}Locales comuns:${NC}"
     echo -e "  ${GREEN}[1]${NC} pt_BR.UTF-8 (Português Brasil)"
@@ -256,7 +222,7 @@ if [[ "$regional_choice" =~ ^[nN]$ ]]; then
     echo -e "  ${GREEN}[6]${NC} Outro (digitar manualmente)"
     echo ""
     read -rp "$(echo -e "${BOLD}Locale [1-6]:${NC} ")" locale_choice
-    case "$locale_choice" in
+    case "${locale_choice:-1}" in
         1) INSTALL_LOCALE="pt_BR.UTF-8" ;;
         2) INSTALL_LOCALE="en_US.UTF-8" ;;
         3) INSTALL_LOCALE="en_GB.UTF-8" ;;
@@ -266,7 +232,6 @@ if [[ "$regional_choice" =~ ^[nN]$ ]]; then
         *) INSTALL_LOCALE="pt_BR.UTF-8" ;;
     esac
 
-    # Timezone
     echo ""
     echo -e "${BOLD}Timezones comuns:${NC}"
     echo -e "  ${GREEN}[1]${NC} America/Sao_Paulo"
@@ -278,7 +243,7 @@ if [[ "$regional_choice" =~ ^[nN]$ ]]; then
     echo -e "  ${GREEN}[7]${NC} Outro (digitar manualmente)"
     echo ""
     read -rp "$(echo -e "${BOLD}Timezone [1-7]:${NC} ")" tz_choice
-    case "$tz_choice" in
+    case "${tz_choice:-1}" in
         1) INSTALL_TIMEZONE="America/Sao_Paulo" ;;
         2) INSTALL_TIMEZONE="America/New_York" ;;
         3) INSTALL_TIMEZONE="America/Chicago" ;;
@@ -292,7 +257,7 @@ fi
 
 info "Keymap: $INSTALL_KEYMAP | Locale: $INSTALL_LOCALE | Timezone: $INSTALL_TIMEZONE"
 
-loadkeys "$INSTALL_KEYMAP"
+loadkeys "$INSTALL_KEYMAP" || warn "Falha ao configurar teclado. Continuando com o padrão."
 success "Teclado configurado ($INSTALL_KEYMAP)."
 
 # ============================================================
@@ -310,7 +275,7 @@ fi
 
 for i in "${!DISKS[@]}"; do
     local_disk="${DISKS[$i]}"
-    local_size=$(lsblk --nodeps --noheadings -o SIZE "/dev/$local_disk")
+    local_size=$(lsblk --nodeps --noheadings -o SIZE "/dev/$local_disk" 2>/dev/null || echo "?")
     local_model=$(lsblk --nodeps --noheadings -o MODEL "/dev/$local_disk" 2>/dev/null || echo "Desconhecido")
     echo -e "  ${GREEN}[$((i+1))]${NC} /dev/$local_disk — ${BOLD}$local_size${NC} — $local_model"
 done
@@ -318,7 +283,7 @@ done
 echo ""
 read -rp "$(echo -e "${BOLD}Selecione o disco [1-${#DISKS[@]}]:${NC} ")" disk_choice
 
-if ! [[ "$disk_choice" =~ ^[0-9]+$ ]] || [ "$disk_choice" -lt 1 ] || [ "$disk_choice" -gt ${#DISKS[@]} ]; then
+if ! [[ "${disk_choice:-}" =~ ^[0-9]+$ ]] || [ "$disk_choice" -lt 1 ] || [ "$disk_choice" -gt ${#DISKS[@]} ]; then
     error "Opção inválida."
 fi
 
@@ -336,18 +301,18 @@ echo -e "  ${BLUE}[2]${NC} Particionar manualmente (abre cfdisk)"
 echo ""
 read -rp "$(echo -e "${BOLD}Opção [1-2]:${NC} ")" part_choice
 
-case "$part_choice" in
+case "${part_choice:-}" in
     1)
         echo ""
         echo -e "${RED}${BOLD}ATENÇÃO: TODOS os dados de $TARGET_DISK serão APAGADOS!${NC}"
         read -rp "$(echo -e "${BOLD}Tem certeza? Digite 'SIM' para confirmar:${NC} ")" confirm
-        if [ "$confirm" != "SIM" ]; then
+        # Case-insensitive: aceita SIM, sim, Sim, etc.
+        if [[ ! "${confirm:-}" =~ ^[sS][iI][mM]$ ]]; then
             error "Particionamento cancelado pelo usuário."
         fi
 
         RAM_GB=$(awk '/MemTotal/ {printf "%d", $2/1024/1024}' /proc/meminfo)
-        # Mínimo 1G, máximo 8G
-        if [ "$RAM_GB" -le 0 ]; then
+        if [ "${RAM_GB:-0}" -le 0 ]; then
             SWAP_SIZE="1G"
         elif [ "$RAM_GB" -le 8 ]; then
             SWAP_SIZE="${RAM_GB}G"
@@ -356,21 +321,29 @@ case "$part_choice" in
         fi
         info "Swap calculado: ${SWAP_SIZE} (RAM: ${RAM_GB}G)"
 
-        sgdisk --zap-all "$TARGET_DISK" >> "$LOG_FILE" 2>&1
+        sgdisk --zap-all "$TARGET_DISK" >> "$LOG_FILE" 2>&1 || error "Falha ao limpar tabela de partições."
 
         if [ "$BOOT_MODE" = "uefi" ]; then
-            sgdisk -n 1:0:+1G -t 1:ef00 -c 1:"EFI" "$TARGET_DISK" >> "$LOG_FILE" 2>&1
-            sgdisk -n 2:0:+${SWAP_SIZE} -t 2:8200 -c 2:"Swap" "$TARGET_DISK" >> "$LOG_FILE" 2>&1
-            sgdisk -n 3:0:0 -t 3:8300 -c 3:"Root" "$TARGET_DISK" >> "$LOG_FILE" 2>&1
+            sgdisk -n 1:0:+1G -t 1:ef00 -c 1:"EFI" "$TARGET_DISK" >> "$LOG_FILE" 2>&1 || error "Falha ao criar partição EFI."
+            sgdisk -n 2:0:+${SWAP_SIZE} -t 2:8200 -c 2:"Swap" "$TARGET_DISK" >> "$LOG_FILE" 2>&1 || error "Falha ao criar partição swap."
+            sgdisk -n 3:0:0 -t 3:8300 -c 3:"Root" "$TARGET_DISK" >> "$LOG_FILE" 2>&1 || error "Falha ao criar partição root."
         else
-            sgdisk -n 1:0:+1M -t 1:ef02 -c 1:"BIOS boot" "$TARGET_DISK" >> "$LOG_FILE" 2>&1
-            sgdisk -n 2:0:+${SWAP_SIZE} -t 2:8200 -c 2:"Swap" "$TARGET_DISK" >> "$LOG_FILE" 2>&1
-            sgdisk -n 3:0:0 -t 3:8300 -c 3:"Root" "$TARGET_DISK" >> "$LOG_FILE" 2>&1
+            sgdisk -n 1:0:+1M -t 1:ef02 -c 1:"BIOS boot" "$TARGET_DISK" >> "$LOG_FILE" 2>&1 || error "Falha ao criar BIOS boot."
+            sgdisk -n 2:0:+${SWAP_SIZE} -t 2:8200 -c 2:"Swap" "$TARGET_DISK" >> "$LOG_FILE" 2>&1 || error "Falha ao criar partição swap."
+            sgdisk -n 3:0:0 -t 3:8300 -c 3:"Root" "$TARGET_DISK" >> "$LOG_FILE" 2>&1 || error "Falha ao criar partição root."
         fi
 
-        # Forçar kernel a reler tabela de partições
+        # Forçar kernel a reler tabela de partições e esperar
         partprobe "$TARGET_DISK" 2>/dev/null || true
-        sleep 2
+        info "Aguardando partições aparecerem..."
+        for _wait in $(seq 1 10); do
+            if [[ "$TARGET_DISK" == *"nvme"* ]] || [[ "$TARGET_DISK" == *"mmcblk"* ]]; then
+                [ -b "${TARGET_DISK}p3" ] && break
+            else
+                [ -b "${TARGET_DISK}3" ] && break
+            fi
+            sleep 1
+        done
 
         if [[ "$TARGET_DISK" == *"nvme"* ]] || [[ "$TARGET_DISK" == *"mmcblk"* ]]; then
             PART_SUFFIX="p"
@@ -406,25 +379,37 @@ case "$part_choice" in
 
         for i in "${!PARTS[@]}"; do
             local_part="${PARTS[$i]}"
-            local_info=$(lsblk -ln -o NAME,SIZE,FSTYPE "/dev/$local_part" | head -1)
+            local_info=$(lsblk -ln -o NAME,SIZE,FSTYPE "/dev/$local_part" 2>/dev/null | head -1)
             echo -e "  ${GREEN}[$((i+1))]${NC} /dev/$local_part — $local_info"
         done
 
+        # ROOT
         echo ""
         read -rp "$(echo -e "${BOLD}Qual partição para ROOT? [1-${#PARTS[@]}]:${NC} ")" root_choice
+        if ! [[ "${root_choice:-}" =~ ^[0-9]+$ ]] || [ "$root_choice" -lt 1 ] || [ "$root_choice" -gt ${#PARTS[@]} ]; then
+            error "Opção inválida para ROOT."
+        fi
         PART_ROOT="/dev/${PARTS[$((root_choice-1))]}"
 
+        # SWAP
         echo ""
         read -rp "$(echo -e "${BOLD}Qual partição para SWAP? [1-${#PARTS[@]}, ou 0 para nenhuma]:${NC} ")" swap_choice
-        if [ "$swap_choice" != "0" ]; then
+        if [ "${swap_choice:-0}" != "0" ]; then
+            if ! [[ "$swap_choice" =~ ^[0-9]+$ ]] || [ "$swap_choice" -lt 1 ] || [ "$swap_choice" -gt ${#PARTS[@]} ]; then
+                error "Opção inválida para SWAP."
+            fi
             PART_SWAP="/dev/${PARTS[$((swap_choice-1))]}"
         else
             PART_SWAP=""
         fi
 
+        # EFI
         if [ "$BOOT_MODE" = "uefi" ]; then
             echo ""
             read -rp "$(echo -e "${BOLD}Qual partição para EFI? [1-${#PARTS[@]}]:${NC} ")" efi_choice
+            if ! [[ "${efi_choice:-}" =~ ^[0-9]+$ ]] || [ "$efi_choice" -lt 1 ] || [ "$efi_choice" -gt ${#PARTS[@]} ]; then
+                error "Opção inválida para EFI."
+            fi
             PART_EFI="/dev/${PARTS[$((efi_choice-1))]}"
         fi
 
@@ -455,7 +440,7 @@ if [ -n "$PART_EFI" ]; then
     echo -e "${YELLOW}A partição EFI (${PART_EFI}) já pode conter bootloaders de outros sistemas.${NC}"
     echo -e "${YELLOW}Se você tem Windows ou outro SO, ${RED}${BOLD}NÃO formate${NC}${YELLOW} a EFI.${NC}"
     read -rp "$(echo -e "${BOLD}Formatar a partição EFI? [s/N]:${NC} ")" FORMAT_EFI
-    if [[ "$FORMAT_EFI" =~ ^[sS]$ ]]; then
+    if [[ "${FORMAT_EFI:-n}" =~ ^[sS]$ ]]; then
         echo -e "  EFI:  ${BOLD}$PART_EFI${NC} → FAT32 (será formatada)"
     else
         echo -e "  EFI:  ${BOLD}$PART_EFI${NC} → manter existente (não formatar)"
@@ -464,24 +449,24 @@ fi
 
 echo ""
 read -rp "$(echo -e "${BOLD}Confirmar formatação? [s/N]:${NC} ")" fmt_confirm
-if [[ ! "$fmt_confirm" =~ ^[sS]$ ]]; then
+if [[ ! "${fmt_confirm:-n}" =~ ^[sS]$ ]]; then
     error "Formatação cancelada pelo usuário."
 fi
 
 info "Formatando partições..."
 
-mkfs.ext4 -F "$PART_ROOT" >> "$LOG_FILE" 2>&1
+mkfs.ext4 -F "$PART_ROOT" 2>&1 | tee -a "$LOG_FILE" || error "Falha ao formatar root."
 success "Root formatado (ext4)."
 
 if [ -n "$PART_SWAP" ]; then
-    mkswap "$PART_SWAP" >> "$LOG_FILE" 2>&1
-    swapon "$PART_SWAP" >> "$LOG_FILE" 2>&1
+    mkswap "$PART_SWAP" >> "$LOG_FILE" 2>&1 || error "Falha ao criar swap."
+    swapon "$PART_SWAP" >> "$LOG_FILE" 2>&1 || error "Falha ao ativar swap."
     success "Swap ativado."
 fi
 
 if [ -n "$PART_EFI" ]; then
-    if [[ "$FORMAT_EFI" =~ ^[sS]$ ]]; then
-        mkfs.fat -F 32 "$PART_EFI" >> "$LOG_FILE" 2>&1
+    if [[ "${FORMAT_EFI:-n}" =~ ^[sS]$ ]]; then
+        mkfs.fat -F 32 "$PART_EFI" >> "$LOG_FILE" 2>&1 || error "Falha ao formatar EFI."
         success "EFI formatado (FAT32)."
     else
         success "EFI mantida sem formatar."
@@ -494,24 +479,23 @@ fi
 
 info "Montando partições..."
 
-mount "$PART_ROOT" /mnt
+mount "$PART_ROOT" /mnt || error "Falha ao montar root em /mnt."
 success "Root montado em /mnt."
 
 if [ -n "$PART_EFI" ]; then
-    mount --mkdir "$PART_EFI" /mnt/boot
+    mount --mkdir "$PART_EFI" /mnt/boot || error "Falha ao montar EFI em /mnt/boot."
     success "EFI montado em /mnt/boot."
 
-    # Limpar arquivos de instalações Linux anteriores na EFI
-    # (preserva /mnt/boot/EFI/ onde ficam os bootloaders do Windows e outros SOs)
-    if ls /mnt/boot/vmlinuz-* /mnt/boot/initramfs-* /mnt/boot/intel-ucode.img /mnt/boot/amd-ucode.img 2>/dev/null | head -1 > /dev/null 2>&1; then
-        info "Limpando arquivos Linux antigos da partição EFI..."
-        rm -f /mnt/boot/vmlinuz-* 2>/dev/null || true
-        rm -f /mnt/boot/initramfs-* 2>/dev/null || true
-        rm -f /mnt/boot/intel-ucode.img 2>/dev/null || true
-        rm -f /mnt/boot/amd-ucode.img 2>/dev/null || true
-        rm -rf /mnt/boot/grub 2>/dev/null || true
-        success "Arquivos Linux antigos removidos da EFI (bootloader Windows preservado)."
-    fi
+    # SEMPRE limpar arquivos Linux antigos da EFI antes do pacstrap
+    # (evita "conflicting files" com intel-ucode.img, vmlinuz-*, etc.)
+    # Preserva /mnt/boot/EFI/ onde ficam os bootloaders do Windows e outros SOs
+    info "Limpando arquivos Linux antigos da partição EFI (se houver)..."
+    rm -f /mnt/boot/vmlinuz-* 2>/dev/null || true
+    rm -f /mnt/boot/initramfs-* 2>/dev/null || true
+    rm -f /mnt/boot/intel-ucode.img 2>/dev/null || true
+    rm -f /mnt/boot/amd-ucode.img 2>/dev/null || true
+    rm -rf /mnt/boot/grub 2>/dev/null || true
+    success "EFI limpa (bootloader Windows preservado)."
 fi
 
 # ============================================================
@@ -519,13 +503,12 @@ fi
 # ============================================================
 
 info "Configurando mirrors (Brasil)..."
-reflector --country Brazil --age 24 --protocol https --sort rate --save /etc/pacman.d/mirrorlist >> "$LOG_FILE" 2>&1 || {
+if ! reflector --country Brazil --age 24 --protocol https --sort rate --save /etc/pacman.d/mirrorlist >> "$LOG_FILE" 2>&1; then
     warn "Reflector falhou para Brasil. Usando mirrors globais..."
-    reflector --age 24 --protocol https --sort rate --number 10 --save /etc/pacman.d/mirrorlist >> "$LOG_FILE" 2>&1 || {
+    if ! reflector --age 24 --protocol https --sort rate --number 10 --save /etc/pacman.d/mirrorlist >> "$LOG_FILE" 2>&1; then
         warn "Reflector falhou completamente. Usando mirrorlist padrão da ISO."
-    }
-}
-# Verificar que o mirrorlist não está vazio
+    fi
+fi
 if [ ! -s /etc/pacman.d/mirrorlist ]; then
     error "mirrorlist está vazio. Verifique sua conexão com a internet."
 fi
@@ -535,11 +518,12 @@ success "Mirrors configurados."
 # 8. Instalar sistema base
 # ============================================================
 
-# zsh incluído no pacstrap porque useradd usa -s /bin/zsh
 info "Instalando sistema base (pacstrap)... Isso pode levar alguns minutos."
-pacstrap -K /mnt base linux linux-firmware linux-headers \
+if ! pacstrap -K /mnt base linux linux-firmware linux-headers \
     "$MICROCODE" networkmanager grub efibootmgr os-prober \
-    git base-devel sudo zsh pciutils 2>&1 | tee -a "$LOG_FILE"
+    git base-devel sudo zsh pciutils 2>&1 | tee -a "$LOG_FILE"; then
+    error "pacstrap falhou. Verifique o log acima."
+fi
 success "Sistema base instalado."
 
 # ============================================================
@@ -552,7 +536,6 @@ genfstab -U /mnt >> /mnt/etc/fstab
 if [ ! -s /mnt/etc/fstab ]; then
     error "fstab está vazio. Algo deu errado na montagem."
 fi
-
 success "fstab gerado."
 
 # ============================================================
@@ -567,7 +550,7 @@ read -rp "$(echo -e "${BOLD}Hostname${NC} [archlinux]: ")" INSTALL_HOSTNAME
 INSTALL_HOSTNAME="${INSTALL_HOSTNAME:-archlinux}"
 
 read -rp "$(echo -e "${BOLD}Nome do usuário:${NC} ")" INSTALL_USER
-while [ -z "$INSTALL_USER" ]; do
+while [ -z "${INSTALL_USER:-}" ]; do
     echo -e "${RED}O nome do usuário não pode ser vazio.${NC}"
     read -rp "$(echo -e "${BOLD}Nome do usuário:${NC} ")" INSTALL_USER
 done
@@ -578,7 +561,7 @@ while true; do
     echo ""
     read -rsp "  Confirmar: " USER_PASS_CONFIRM
     echo ""
-    if [ "$USER_PASS" = "$USER_PASS_CONFIRM" ] && [ -n "$USER_PASS" ]; then
+    if [ "${USER_PASS:-}" = "${USER_PASS_CONFIRM:-}" ] && [ -n "${USER_PASS:-}" ]; then
         break
     fi
     echo -e "${RED}Senhas não conferem ou vazias. Tente novamente.${NC}"
@@ -590,7 +573,7 @@ while true; do
     echo ""
     read -rsp "  Confirmar: " ROOT_PASS_CONFIRM
     echo ""
-    if [ "$ROOT_PASS" = "$ROOT_PASS_CONFIRM" ] && [ -n "$ROOT_PASS" ]; then
+    if [ "${ROOT_PASS:-}" = "${ROOT_PASS_CONFIRM:-}" ] && [ -n "${ROOT_PASS:-}" ]; then
         break
     fi
     echo -e "${RED}Senhas não conferem ou vazias. Tente novamente.${NC}"
@@ -603,14 +586,14 @@ done
 info "Configurando o sistema via chroot..."
 
 # Timezone
-arch-chroot /mnt ln -sf "/usr/share/zoneinfo/$INSTALL_TIMEZONE" /etc/localtime
-arch-chroot /mnt hwclock --systohc
+arch-chroot /mnt ln -sf "/usr/share/zoneinfo/$INSTALL_TIMEZONE" /etc/localtime || warn "Falha ao configurar timezone."
+arch-chroot /mnt hwclock --systohc || warn "Falha ao configurar relógio."
 
 # Locale
-LOCALE_PREFIX="${INSTALL_LOCALE%%.*}"  # ex: pt_BR
+LOCALE_PREFIX="${INSTALL_LOCALE%%.*}"
 sed -i 's/^#en_US.UTF-8/en_US.UTF-8/' /mnt/etc/locale.gen
 sed -i "s/^#${LOCALE_PREFIX}/${LOCALE_PREFIX}/" /mnt/etc/locale.gen
-arch-chroot /mnt locale-gen 2>&1 | tee -a "$LOG_FILE"
+arch-chroot /mnt locale-gen 2>&1 | tee -a "$LOG_FILE" || warn "Falha no locale-gen."
 echo "LANG=$INSTALL_LOCALE" > /mnt/etc/locale.conf
 echo "KEYMAP=$INSTALL_KEYMAP" > /mnt/etc/vconsole.conf
 
@@ -624,19 +607,19 @@ cat > /mnt/etc/hosts << HOSTS
 127.0.1.1   ${INSTALL_HOSTNAME}.localdomain ${INSTALL_HOSTNAME}
 HOSTS
 
-# Senha do root
-echo "root:${ROOT_PASS}" | arch-chroot /mnt chpasswd
+# Senha do root (printf evita problemas com caracteres especiais no echo)
+printf '%s:%s\n' "root" "$ROOT_PASS" | arch-chroot /mnt chpasswd || warn "Falha ao definir senha do root."
 
 # Criar usuário
-arch-chroot /mnt useradd -m -G wheel -s /bin/zsh "$INSTALL_USER"
-echo "${INSTALL_USER}:${USER_PASS}" | arch-chroot /mnt chpasswd
+arch-chroot /mnt useradd -m -G wheel -s /bin/zsh "$INSTALL_USER" || warn "Falha ao criar usuário."
+printf '%s:%s\n' "$INSTALL_USER" "$USER_PASS" | arch-chroot /mnt chpasswd || warn "Falha ao definir senha do usuário."
 
-# Configurar sudo
+# Configurar sudo (tenta dois padrões possíveis)
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /mnt/etc/sudoers
+sed -i 's/^# %wheel ALL=(ALL) ALL/%wheel ALL=(ALL) ALL/' /mnt/etc/sudoers
 
-# Habilitar serviços (apenas os que foram instalados no pacstrap)
-# Nota: bluetooth (bluez) será habilitado pelo install.sh quando for instalado
-arch-chroot /mnt systemctl enable NetworkManager 2>&1 | tee -a "$LOG_FILE"
+# Habilitar serviços (sem --now, que falha no chroot)
+arch-chroot /mnt systemctl enable NetworkManager 2>&1 | tee -a "$LOG_FILE" || warn "Falha ao habilitar NetworkManager."
 
 success "Sistema configurado."
 
@@ -645,20 +628,22 @@ success "Sistema configurado."
 info "Instalando GRUB..."
 
 if [ "$BOOT_MODE" = "uefi" ]; then
-    arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB 2>&1 | tee -a "$LOG_FILE"
+    arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB 2>&1 | tee -a "$LOG_FILE" || error "Falha ao instalar GRUB."
 else
-    arch-chroot /mnt grub-install --target=i386-pc "$TARGET_DISK" 2>&1 | tee -a "$LOG_FILE"
+    arch-chroot /mnt grub-install --target=i386-pc "$TARGET_DISK" 2>&1 | tee -a "$LOG_FILE" || error "Falha ao instalar GRUB."
 fi
 
 # Habilitar os-prober (descomentar se existir, adicionar se não existir)
-if grep -q "GRUB_DISABLE_OS_PROBER" /mnt/etc/default/grub; then
+if grep -q "GRUB_DISABLE_OS_PROBER" /mnt/etc/default/grub 2>/dev/null; then
     sed -i 's/^#\?GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /mnt/etc/default/grub
 else
     echo "GRUB_DISABLE_OS_PROBER=false" >> /mnt/etc/default/grub
 fi
 
-arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>&1 | tee -a "$LOG_FILE"
+arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg 2>&1 | tee -a "$LOG_FILE" || warn "Falha no grub-mkconfig."
 success "GRUB instalado e configurado."
+
+info "Após o reboot, rode 'sudo grub-mkconfig -o /boot/grub/grub.cfg' para detectar Windows/outros SOs."
 
 # ── Dotfiles + install.sh ──
 
@@ -669,11 +654,10 @@ if [ -d /opt/dotfiles ]; then
     arch-chroot /mnt chown -R "${INSTALL_USER}:${INSTALL_USER}" "/home/${INSTALL_USER}/dotfiles"
     success "Dotfiles copiados para /home/${INSTALL_USER}/dotfiles."
 
-    # Adicionar NOPASSWD temporário para o install.sh poder usar sudo no chroot
+    # NOPASSWD temporário para o install.sh poder usar sudo no chroot
     echo "${INSTALL_USER} ALL=(ALL:ALL) NOPASSWD: ALL" > /mnt/etc/sudoers.d/99-install-nopasswd
     chmod 440 /mnt/etc/sudoers.d/99-install-nopasswd
 
-    # Executar install.sh como o usuário (não como root)
     info "Executando install.sh (pós-instalação)..."
     arch-chroot /mnt runuser -u "$INSTALL_USER" -- /home/"$INSTALL_USER"/dotfiles/install.sh 2>&1 | tee -a "$LOG_FILE" || {
         warn "install.sh retornou erro. Verifique o log: $LOG_FILE"
@@ -683,13 +667,19 @@ if [ -d /opt/dotfiles ]; then
     # Remover NOPASSWD temporário (segurança)
     rm -f /mnt/etc/sudoers.d/99-install-nopasswd
 else
-    warn "/opt/dotfiles não encontrado. Pule a pós-instalação."
+    warn "/opt/dotfiles não encontrado na ISO."
     warn "Após o reboot, clone os dotfiles e rode ./install.sh manualmente."
 fi
+
+# Limpar variáveis de senha da memória
+unset USER_PASS USER_PASS_CONFIRM ROOT_PASS ROOT_PASS_CONFIRM
 
 # ============================================================
 # 12. Finalizar
 # ============================================================
+
+# Desabilitar o cleanup automático (sucesso, não precisa desmontar no trap)
+trap - EXIT
 
 info "Finalizando..."
 
@@ -697,11 +687,11 @@ umount -R /mnt 2>/dev/null || true
 swapoff -a 2>/dev/null || true
 
 echo "" | tee -a "$LOG_FILE"
-echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}" | tee -a "$LOG_FILE"
-echo -e "${GREEN}║                                              ║${NC}" | tee -a "$LOG_FILE"
-echo -e "${GREEN}║  Instalação concluída com sucesso!            ║${NC}" | tee -a "$LOG_FILE"
-echo -e "${GREEN}║                                              ║${NC}" | tee -a "$LOG_FILE"
-echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}" | tee -a "$LOG_FILE"
+echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}" | tee -a "$LOG_FILE"
+echo -e "${GREEN}║                                                  ║${NC}" | tee -a "$LOG_FILE"
+echo -e "${GREEN}║    Instalação concluída com sucesso!              ║${NC}" | tee -a "$LOG_FILE"
+echo -e "${GREEN}║                                                  ║${NC}" | tee -a "$LOG_FILE"
+echo -e "${GREEN}╚══════════════════════════════════════════════════╝${NC}" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
 echo -e "  Hostname:  ${BLUE}$INSTALL_HOSTNAME${NC}" | tee -a "$LOG_FILE"
 echo -e "  Usuário:   ${BLUE}$INSTALL_USER${NC}" | tee -a "$LOG_FILE"
