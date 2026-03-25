@@ -129,18 +129,117 @@ if [ ! -f /etc/arch-release ]; then
     error "Este script é exclusivo para Arch Linux."
 fi
 
-# Verificar conexão com internet (curl, não ping — firewalls bloqueiam ICMP)
+# Verificar conexão — se não tiver, oferecer Wi-Fi
 if ! curl -sf --max-time 10 "https://archlinux.org" > /dev/null 2>&1; then
-    # Fallback: tentar DNS
-    if ! host archlinux.org > /dev/null 2>&1; then
-        error "Sem conexão com a internet. Verifique sua rede."
-    fi
+    warn "Sem conexão com a internet."
+    echo ""
+    echo -e "${BOLD}Como deseja conectar?${NC}"
+    echo -e "  ${GREEN}[1]${NC} Wi-Fi"
+    echo -e "  ${BLUE}[2]${NC} Já estou com cabo ethernet (tentar novamente)"
+    echo -e "  ${YELLOW}[3]${NC} Cancelar"
+    echo ""
+    read -rp "$(echo -e "${BOLD}Opção [1-3]:${NC} ")" net_choice
+
+    case "${net_choice:-3}" in
+        1)
+            info "Buscando redes Wi-Fi..."
+            # Usar nmcli (NetworkManager) se disponível, senão iwctl
+            if command -v nmcli &>/dev/null && nmcli -t -f RUNNING general 2>/dev/null | grep -q running; then
+                # Escanear e listar redes via NetworkManager
+                nmcli device wifi rescan 2>/dev/null || true
+                sleep 3
+                echo ""
+                echo -e "${BOLD}Redes Wi-Fi disponíveis:${NC}"
+                echo ""
+                nmcli device wifi list 2>/dev/null
+                echo ""
+                read -rp "$(echo -e "${BOLD}Digite o nome exato da rede Wi-Fi:${NC} ")" WIFI_SSID
+
+                WIFI_CONECTADO=false
+                for tentativa in 1 2 3; do
+                    echo ""
+                    read -rsp "$(echo -e "${BOLD}Senha do Wi-Fi ($WIFI_SSID) [tentativa $tentativa/3]:${NC} ")" WIFI_PASS
+                    echo ""
+                    info "Conectando a '$WIFI_SSID'..."
+                    nmcli device wifi connect "$WIFI_SSID" password "$WIFI_PASS" 2>/dev/null || true
+                    sleep 5
+                    if curl -sf --max-time 10 "https://archlinux.org" > /dev/null 2>&1; then
+                        success "Conectado ao Wi-Fi '$WIFI_SSID'."
+                        WIFI_CONECTADO=true
+                        break
+                    else
+                        warn "Falha ao conectar. Verifique a senha e tente novamente."
+                    fi
+                done
+                if [ "$WIFI_CONECTADO" = false ]; then
+                    error "Falha ao conectar ao Wi-Fi após 3 tentativas."
+                fi
+            elif command -v iwctl &>/dev/null; then
+                # Fallback: usar iwctl
+                systemctl start iwd 2>/dev/null || true
+                sleep 2
+                WIFI_DEV=$(iwctl device list 2>/dev/null | awk '/station/{print $2}' | head -1)
+                if [ -z "${WIFI_DEV:-}" ]; then
+                    WIFI_DEV=$(ip link show 2>/dev/null | grep -oP 'wlan\d+|wlp\S+' | head -1 || true)
+                fi
+                if [ -z "${WIFI_DEV:-}" ]; then
+                    error "Nenhuma interface Wi-Fi encontrada. Use cabo ethernet."
+                fi
+                iwctl station "$WIFI_DEV" scan 2>/dev/null || true
+                sleep 3
+                echo ""
+                echo -e "${BOLD}Redes Wi-Fi disponíveis:${NC}"
+                iwctl station "$WIFI_DEV" get-networks 2>/dev/null || true
+                echo ""
+                read -rp "$(echo -e "${BOLD}Digite o nome exato da rede Wi-Fi:${NC} ")" WIFI_SSID
+
+                WIFI_CONECTADO=false
+                for tentativa in 1 2 3; do
+                    echo ""
+                    read -rsp "$(echo -e "${BOLD}Senha do Wi-Fi ($WIFI_SSID) [tentativa $tentativa/3]:${NC} ")" WIFI_PASS
+                    echo ""
+                    info "Conectando a '$WIFI_SSID'..."
+                    iwctl --passphrase "$WIFI_PASS" station "$WIFI_DEV" connect "$WIFI_SSID" 2>/dev/null || true
+                    sleep 5
+                    if curl -sf --max-time 10 "https://archlinux.org" > /dev/null 2>&1; then
+                        success "Conectado ao Wi-Fi '$WIFI_SSID'."
+                        WIFI_CONECTADO=true
+                        break
+                    else
+                        warn "Falha ao conectar. Verifique a senha e tente novamente."
+                    fi
+                done
+                if [ "$WIFI_CONECTADO" = false ]; then
+                    error "Falha ao conectar ao Wi-Fi após 3 tentativas."
+                fi
+            else
+                error "Nenhum gerenciador de rede encontrado (nmcli/iwctl). Conecte-se manualmente."
+            fi
+            ;;
+        2)
+            info "Tentando novamente..."
+            sleep 3
+            if ! curl -sf --max-time 10 "https://archlinux.org" > /dev/null 2>&1; then
+                error "Ainda sem internet. Verifique o cabo ethernet."
+            fi
+            success "Conectado via ethernet."
+            ;;
+        *)
+            error "Instalação cancelada."
+            ;;
+    esac
 fi
 
-# Verificar se sudo está configurado
+# Verificar se sudo está configurado e manter cache ativo
 if ! sudo -v 2>/dev/null; then
     error "sudo não está configurado para este usuário."
 fi
+
+# Manter sudo ativo durante toda a execução (renova a cada 50s em background)
+while true; do sudo -n true; sleep 50; done 2>/dev/null &
+SUDO_KEEPALIVE_PID=$!
+# Garantir que o processo de keepalive morre quando o script terminar
+trap 'kill $SUDO_KEEPALIVE_PID 2>/dev/null' EXIT
 
 success "Pré-requisitos validados."
 

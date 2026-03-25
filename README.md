@@ -36,6 +36,7 @@ sudo ./build.sh
 
 # 3. Gravar no pendrive (substitua /dev/sdX pelo seu USB)
 # Use 'lsblk' para identificar o dispositivo correto
+# A ISO estará em /root/iso-out/ — confira o nome exato com: sudo ls /root/iso-out/
 sudo dd bs=4M if=/root/iso-out/archlinux-hyprland-*.iso of=/dev/sdX conv=fsync oflag=direct status=progress
 
 # 4. Bootar pelo pendrive e seguir o menu interativo
@@ -84,14 +85,21 @@ Na opção 2 do instalador, escolha "Particionar manualmente" e selecione as par
 ### Opção B: Apenas dotfiles (para quem JÁ tem Arch instalado)
 
 ```bash
+# 1. Instalar git (se não tiver)
 sudo pacman -S git
+
+# 2. Clonar e rodar (NÃO use sudo no install.sh)
 git clone https://github.com/LuisMIguelFurlanettoSousa/dotfiles
 cd dotfiles
+chmod +x install.sh
 ./install.sh
+
+# 3. Reiniciar
 sudo reboot
 ```
 
-> **Pré-requisitos:** Arch Linux com `base`, `linux`, `linux-firmware`, usuário com `sudo` e internet.
+> **Pré-requisitos:** Arch Linux com `base`, `linux`, `linux-firmware`, usuário com `sudo` e internet (Wi-Fi ou cabo).
+> O script pede a senha sudo uma vez e conecta ao Wi-Fi se necessário.
 
 ## Features
 
