@@ -148,14 +148,25 @@ success "Pré-requisitos validados."
 # 2. Inicializar keyring e atualizar sistema
 # ============================================================
 
-info "Inicializando keyring do pacman..."
-sudo pacman-key --init >> "$LOG_FILE" 2>&1
-sudo pacman-key --populate archlinux >> "$LOG_FILE" 2>&1
-success "Keyring inicializado."
+# Detectar se está rodando dentro de um chroot (ex: via full-install.sh)
+IN_CHROOT=false
+if [ "$(stat -c %d:%i /)" != "$(stat -c %d:%i /proc/1/root/.)" ] 2>/dev/null; then
+    IN_CHROOT=true
+    info "Detectado ambiente chroot."
+fi
 
-info "Atualizando sistema..."
-retry "Atualização do sistema (pacman -Syu)" sudo pacman -Syu --noconfirm
-success "Sistema atualizado."
+if [ "$IN_CHROOT" = false ]; then
+    info "Inicializando keyring do pacman..."
+    sudo pacman-key --init >> "$LOG_FILE" 2>&1
+    sudo pacman-key --populate archlinux >> "$LOG_FILE" 2>&1
+    success "Keyring inicializado."
+
+    info "Atualizando sistema..."
+    retry "Atualização do sistema (pacman -Syu)" sudo pacman -Syu --noconfirm
+    success "Sistema atualizado."
+else
+    info "Chroot detectado: pulando keyring e atualização (já feito pelo pacstrap)."
+fi
 
 # ============================================================
 # 3. Habilitar multilib (necessário para pacotes lib32-*)
@@ -469,8 +480,15 @@ fi
 info "Habilitando serviços..."
 
 # Serviços do sistema (com sudo)
+# No chroot, --now não funciona (systemd não é PID 1), usar só enable
+if [ "$IN_CHROOT" = true ]; then
+    SYSTEMCTL_FLAG="enable"
+else
+    SYSTEMCTL_FLAG="enable --now"
+fi
+
 for svc in NetworkManager bluetooth; do
-    if sudo systemctl enable --now "$svc" >> "$LOG_FILE" 2>&1; then
+    if sudo systemctl $SYSTEMCTL_FLAG "$svc" >> "$LOG_FILE" 2>&1; then
         success "  $svc habilitado."
     else
         warn "  Falha ao habilitar $svc."

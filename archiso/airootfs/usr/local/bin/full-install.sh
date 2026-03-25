@@ -30,16 +30,6 @@ success() { echo -e "${GREEN}[OK]${NC} $1" | tee -a "$LOG_FILE"; }
 warn()    { echo -e "${YELLOW}[AVISO]${NC} $1" | tee -a "$LOG_FILE"; }
 error()   { echo -e "${RED}[ERRO]${NC} $1" | tee -a "$LOG_FILE"; exit 1; }
 
-# Função para rodar comando, mostrar saída na tela E no log, e abortar se falhar
-run() {
-    local desc="$1"
-    shift
-    info "$desc"
-    if ! "$@" 2>&1 | tee -a "$LOG_FILE"; then
-        error "$desc falhou. Verifique o log: $LOG_FILE"
-    fi
-}
-
 echo "=== Instalação iniciada em $(date) ===" > "$LOG_FILE"
 
 # ============================================================
@@ -518,10 +508,18 @@ success "Mirrors configurados."
 # 8. Instalar sistema base
 # ============================================================
 
+# Esperar pacman-init.service terminar (evita erros de keyring/PGP)
+info "Aguardando inicialização do keyring..."
+systemctl is-active --wait pacman-init.service 2>/dev/null || true
+
+# Sincronizar relógio (assinaturas PGP dependem de hora correta)
+timedatectl set-ntp true 2>/dev/null || true
+sleep 2
+
 info "Instalando sistema base (pacstrap)... Isso pode levar alguns minutos."
 if ! pacstrap -K /mnt base linux linux-firmware linux-headers \
     "$MICROCODE" networkmanager grub efibootmgr os-prober \
-    git base-devel sudo zsh pciutils 2>&1 | tee -a "$LOG_FILE"; then
+    git base-devel sudo zsh pciutils ntfs-3g 2>&1 | tee -a "$LOG_FILE"; then
     error "pacstrap falhou. Verifique o log acima."
 fi
 success "Sistema base instalado."
