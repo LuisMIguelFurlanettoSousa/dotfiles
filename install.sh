@@ -351,10 +351,13 @@ PACMAN_PKGS=(
     hyprland
     hyprlock
     xdg-desktop-portal-hyprland
-    # Barra, menu e seletor
+    # Barra, menu, seletor e notificações
     waybar
     wofi
     rofi
+    swaync
+    hypridle
+    brightnessctl
     # Utilitários Wayland
     grim
     slurp
@@ -468,6 +471,7 @@ STOW_PACKAGES=(
     wofi
     wlogout
     ghostty
+    swaync
     zsh
     gtk-3.0
     nvim

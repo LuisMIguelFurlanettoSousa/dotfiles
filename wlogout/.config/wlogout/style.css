@@ -1,68 +1,59 @@
+* {
+    background-image: none;
+    font-size: 20px;
+    font-family: "JetBrains Mono Nerd Font";
+}
+
 window {
-  font-family: JetBrainsMono Nerd Font;
-  font-size: 14pt;
-  color: #ffffff;
-  background-color: rgba(0, 0, 0, 0.75);
+    background-color: rgba(17, 17, 17, 0.45);
 }
 
 button {
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 100px;
-  border: 2px solid #171717;
-  border-radius: 0px;
-  background-color: #0a0a0a;
-  margin: 2.5px;
-  color: #ffffff;
+    border-radius: 20px;
+    margin: 10px;
+    color: #dee3e6;
+    border-color: #dee3e6;
+    background-color: rgba(0, 0, 0, 0.5);
+    outline-style: none;
+    border-style: solid;
+    border-width: 0px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 20%;
+    box-shadow: none;
+    text-shadow: none;
 }
 
-button:hover {
-  border: 2px solid #171717;
-  border-radius: 0px;
-  background-color: #0a0a0a;
-  color: #ffffff;
+button:hover, button:focus {
+    background-color: rgba(64, 72, 75, 0.8);
+    background-size: 30%;
+    transition: all 0.3s cubic-bezier(.55,0.0,.28,1.682);
 }
 
-button:active {
-  border-radius: 0px;
-  border: 2px solid #171717;
-  background-color: #0a0a0a;
-  color: #ffffff;
-}
-
-button:focus {
-  border-radius: 0px;
-  border: 2px solid #171717;
-  background-color: #0a0a0a;
-  color: #ffffff;
+button span {
+    font-size: 1.2em;
 }
 
 #lock {
-  background-image: image(url("./lock.png"));
-  border: 2px solid #171717;
+    background-image: image(url("./icons/lock.png"));
 }
 
 #logout {
-  background-image: image(url("./logout.png"));
-  border: 2px solid #171717;
+    background-image: image(url("./icons/logout.png"));
 }
 
 #suspend {
-  background-image: image(url("./sleep.png"));
-  border: 2px solid #171717;
+    background-image: image(url("./icons/sleep.png"));
 }
 
 #shutdown {
-  background-image: image(url("./power.png"));
-  border: 2px solid #171717;
+    background-image: image(url("./icons/power.png"));
 }
 
 #reboot {
-  background-image: image(url("./restart.png"));
-  border: 2px solid #171717;
+    background-image: image(url("./icons/restart.png"));
 }
 
 #hibernate {
-  background-image: image(url("./restart.png"));
-  border: 2px solid #171717;
+    background-image: image(url("./icons/hibernate.png"));
 }
