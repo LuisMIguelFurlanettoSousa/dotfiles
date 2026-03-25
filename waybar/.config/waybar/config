@@ -39,6 +39,8 @@
         "group/notify",	
 	"battery",
 	"custom/separator#blank",  
+	"backlight",
+	"custom/separator#blank",
 	"group/audio",
 	"custom/separator#blank",
 	"custom/power",

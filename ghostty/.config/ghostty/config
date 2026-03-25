@@ -34,3 +34,6 @@ palette = 13=#f5c2e7
 palette = 14=#7dcfff
 palette = 15=#f4f4f5
 palette = 15=#f4f4f5
+
+# Desabilitar Ctrl+Enter de colocar em tela cheia
+keybind = ctrl+enter=unbind

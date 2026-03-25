@@ -9,12 +9,6 @@ zinit light "zsh-users/zsh-syntax-highlighting"
 zinit light "zsh-users/zsh-completions"
 zinit light "zsh-users/zsh-autosuggestions"
 zinit light "Aloxaf/fzf-tab"
-zinit light "jeffreytse/zsh-vi-mode"
-ZVM_VI_INSERT_ESCAPE_BINDKEY=kj
-ZVM_VI_HIGHLIGHT_FOREGROUND=#7dcfff
-ZVM_VI_HIGHLIGHT_BACKGROUND=#6366f1
-ZVM_VI_HIGHLIGHT_EXTRASTYLE=bold
-
 # load
 autoload -Uz compinit && compinit
 zinit cdreplay -q
@@ -22,9 +16,6 @@ autoload -U colors && colors
 autoload -Uz add-zsh-hook
 setopt prompt_subst interactive_comments
 
-typeset -g VI_MODE_LABEL="I"
-typeset -g VI_MODE_COLOR="132:204:22"
-typeset -g VI_MODE_PROMPT=""
 typeset -g PWD_PROMPT=""
 typeset -g GIT_PROMPT=""
 typeset -g ARROW_PROMPT=$'%{\e[1m\e[38;2;20;184;166m%}→%{\e[0m%}'
@@ -40,12 +31,6 @@ function zsh_reset() {
 
 function stay() {
   nohup "$@" > /dev/null 2>&1 < /dev/null & disown
-}
-
-function zsh_fish_mode_segment() {
-  local -a rgb
-  rgb=(${(s/:/)VI_MODE_COLOR})
-  VI_MODE_PROMPT="$(zsh_color ${rgb[1]} ${rgb[2]} ${rgb[3]})${VI_MODE_LABEL}$(zsh_reset) "
 }
 
 function zsh_fish_pwd_segment() {
@@ -101,55 +86,11 @@ function zsh_fish_git_segment() {
 }
 
 function zsh_refresh_prompt() {
-  zsh_fish_mode_segment
   zsh_fish_pwd_segment
   zsh_fish_git_segment
-  PROMPT='${VI_MODE_PROMPT}${PWD_PROMPT}${GIT_PROMPT} ${ARROW_PROMPT} '
+  PROMPT='${PWD_PROMPT}${GIT_PROMPT} ${ARROW_PROMPT} '
 }
 
-function zsh_update_vi_mode() {
-  case "$ZVM_MODE" in
-    "$ZVM_MODE_NORMAL")
-      VI_MODE_LABEL="N"
-      VI_MODE_COLOR="244:63:94"
-      ;;
-    "$ZVM_MODE_INSERT"|"")
-      VI_MODE_LABEL="I"
-      VI_MODE_COLOR="132:204:22"
-      ;;
-    "$ZVM_MODE_VISUAL"|"$ZVM_MODE_VISUAL_LINE")
-      VI_MODE_LABEL="V"
-      VI_MODE_COLOR="139:92:246"
-      ;;
-    *)
-      VI_MODE_LABEL="?"
-      VI_MODE_COLOR="255:255:255"
-      ;;
-  esac
-
-  zsh_fish_mode_segment
-  [[ -o zle ]] && zle reset-prompt 2> /dev/null
-}
-
-function zvm_after_select_vi_mode() {
-  zsh_update_vi_mode
-}
-
-function zsh_fish_block_cursor() {
-  printf '\e[2 q'
-}
-
-function zle-line-init() {
-  zsh_fish_block_cursor
-}
-
-function zle-keymap-select() {
-  zsh_fish_block_cursor
-}
-
-zle -N zle-line-init
-zle -N zle-keymap-select
-add-zsh-hook precmd zsh_update_vi_mode
 add-zsh-hook precmd zsh_refresh_prompt
 
 # aliases
