@@ -121,7 +121,9 @@ fi
 # ============================================================
 
 if ! pacman -Qi archiso &>/dev/null; then
-    error "archiso não está instalado. Instale com: sudo pacman -S archiso"
+    info "archiso não encontrado. Instalando..."
+    pacman -S --needed --noconfirm archiso || error "Falha ao instalar archiso."
+    success "archiso instalado."
 fi
 
 info "Sistema detectado: Arch Linux (modo nativo)"
