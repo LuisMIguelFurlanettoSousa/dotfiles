@@ -32,6 +32,18 @@ warn()    { echo -e "${YELLOW}[AVISO]${NC} $1"; }
 error()   { echo -e "${RED}[ERRO]${NC} $1"; exit 1; }
 
 # ============================================================
+# 0. Verificar dependências do build
+# ============================================================
+
+for dep in rsync; do
+    if ! command -v "$dep" &>/dev/null; then
+        info "$dep não encontrado. Instalando..."
+        pacman -S --needed --noconfirm "$dep" || error "Falha ao instalar $dep."
+        success "$dep instalado."
+    fi
+done
+
+# ============================================================
 # 1. Limpar builds anteriores
 # ============================================================
 
