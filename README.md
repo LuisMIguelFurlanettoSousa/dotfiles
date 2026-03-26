@@ -5,7 +5,7 @@
   <a href="https://archlinux.org"><img src="https://img.shields.io/badge/Arch_Linux-1793D1?style=flat&logo=arch-linux&logoColor=white" alt="Arch Linux"></a>
   <a href="https://hyprland.org"><img src="https://img.shields.io/badge/Hyprland-58E1FF?style=flat&logo=wayland&logoColor=white" alt="Hyprland"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licença-MIT-green" alt="License"></a>
-  <a href="https://github.com/LuisMIguelFurlanettoSousa/dotfiles/stargazers"><img src="https://img.shields.io/github/stars/LuisMIguelFurlanettoSousa/dotfiles?style=flat" alt="Stars"></a>
+  <a href="https://github.com/LuisMIguelFurlanettoSousa/dotfiles-arch/stargazers"><img src="https://img.shields.io/github/stars/LuisMIguelFurlanettoSousa/dotfiles?style=flat" alt="Stars"></a>
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@ Crie uma ISO customizada com Arch Linux + Hyprland pré-configurado. Boota pelo 
 
 ```bash
 # 1. Clonar o repositório
-git clone https://github.com/LuisMIguelFurlanettoSousa/dotfiles
+git clone https://github.com/LuisMIguelFurlanettoSousa/dotfiles-arch
 cd dotfiles
 
 # 2. Buildar a ISO (~10-30 min, baixa ~1.8GB de pacotes)
@@ -43,6 +43,24 @@ sudo dd bs=4M if=/root/iso-out/archlinux-hyprland-*.iso of=/dev/sdX conv=fsync o
 ```
 
 > **Importante:** O comando `dd` apaga tudo no pendrive. Certifique-se de selecionar o dispositivo correto.
+
+<details>
+<summary><strong>Como dar boot pelo pendrive</strong></summary>
+
+1. Desligue o computador e insira o pendrive
+2. Ligue o computador e entre no menu de boot:
+   - **Acer/ASUS/Samsung:** pressione `F2` ou `DEL` repetidamente ao ligar
+   - **Dell:** pressione `F12`
+   - **HP:** pressione `F9` ou `ESC`
+   - **Lenovo:** pressione `F12` ou `Fn + F12`
+   - **MSI:** pressione `DEL`
+   - Se nenhuma funcionar, procure "boot menu key + modelo do seu PC" no Google
+3. No menu de boot, selecione o pendrive USB (pode aparecer como "USB", "UEFI: nome-do-pendrive" ou o nome do fabricante do pendrive)
+4. Se o PC não reconhecer o pendrive, entre na BIOS/UEFI e **desabilite Secure Boot**
+
+> **Dica:** Em notebooks com Windows, pode ser necessário desabilitar "Fast Startup" nas configurações de energia do Windows antes de reiniciar.
+
+</details>
 
 <details>
 <summary><strong>O que acontece ao bootar o pendrive</strong></summary>
@@ -89,7 +107,7 @@ Na opção 2 do instalador, escolha "Particionar manualmente" e selecione as par
 sudo pacman -S git
 
 # 2. Clonar e rodar (NÃO use sudo no install.sh)
-git clone https://github.com/LuisMIguelFurlanettoSousa/dotfiles
+git clone https://github.com/LuisMIguelFurlanettoSousa/dotfiles-arch
 cd dotfiles
 chmod +x install.sh
 ./install.sh
@@ -100,6 +118,17 @@ sudo reboot
 
 > **Pré-requisitos:** Arch Linux com `base`, `linux`, `linux-firmware`, usuário com `sudo` e internet (Wi-Fi ou cabo).
 > O script pede a senha sudo uma vez e conecta ao Wi-Fi se necessário.
+
+## Requisitos mínimos
+
+| Requisito | Mínimo |
+|---|---|
+| CPU | x86_64 (qualquer processador 64-bit) |
+| RAM | 2 GB (recomendado 4 GB+) |
+| Disco | 20 GB livres (recomendado 40 GB+) |
+| GPU | NVIDIA, AMD ou Intel (drivers instalados automaticamente) |
+| Pendrive | 4 GB+ (para a ISO bootável) |
+| Internet | Necessária para instalação (Wi-Fi ou cabo ethernet) |
 
 ## Features
 
@@ -120,8 +149,10 @@ sudo reboot
 |---|---|---|
 | Window Manager | [Hyprland](https://hyprland.org) | Compositor Wayland com animações e tiling |
 | Barra | [Waybar](https://github.com/Alexays/Waybar) | Barra de status customizável |
-| Terminal | [Ghostty](https://ghostty.org) | Terminal GPU-accelerated |
-| Launcher | [Wofi](https://hg.sr.ht/~scoopta/wofi) | Application launcher para Wayland |
+| Terminal | [Ghostty](https://ghostty.org) / [Kitty](https://sw.kovidgoyal.net/kitty/) | Terminais GPU-accelerated |
+| Launcher | [Rofi](https://github.com/davatorium/rofi) / [Wofi](https://hg.sr.ht/~scoopta/wofi) | Application launchers para Wayland |
+| Notificações | [SwayNC](https://github.com/ErikReider/SwayNotificationCenter) | Central de notificações |
+| Multiplexador | [tmux](https://github.com/tmux/tmux) + TPM | Multiplexador de terminal com plugins |
 | File Manager | [Nemo](https://github.com/linuxmint/nemo) | Gerenciador de arquivos GTK |
 | Lock Screen | [Hyprlock](https://github.com/hyprwm/hyprlock) | Tela de bloqueio para Hyprland |
 | Logout | [Wlogout](https://github.com/ArtsyMacaw/wlogout) | Menu de logout/shutdown |
@@ -146,6 +177,8 @@ sudo reboot
 | `SUPER + SHIFT + S` | Screenshot (área selecionada) |
 | `SUPER + SHIFT + L` | Lock screen |
 | `SUPER + SHIFT + Q` | Menu de logout |
+| `SUPER + W` | Seletor de wallpaper |
+| `SUPER + SHIFT + B` | Recarregar Waybar |
 | `SUPER + 1-0` | Trocar workspace |
 | `SUPER + SHIFT + 1-0` | Mover janela para workspace |
 | `SUPER + H/J/K/L` | Navegar janelas (vim-style) |
@@ -156,19 +189,23 @@ sudo reboot
 ```
 ./install.sh
   ├── Valida pré-requisitos (Arch Linux, internet, usuário não-root)
+  ├── Conecta ao Wi-Fi (se necessário)
   ├── Atualiza o sistema (pacman -Syu)
+  ├── Habilita repositório multilib
   ├── Instala yay (AUR helper)
   ├── Detecta GPU e instala drivers
-  │     ├── NVIDIA → nvidia-dkms + variáveis de ambiente
+  │     ├── NVIDIA → nvidia-open-dkms + variáveis de ambiente
   │     ├── AMD → mesa + vulkan-radeon
   │     └── Intel → mesa + vulkan-intel
-  ├── Instala ~40 pacotes (pacman + yay)
-  ├── Remove configs conflitantes
+  ├── Instala ~50 pacotes (pacman + yay)
+  ├── Faz backup das configs existentes
   ├── Aplica configs via stow (symlinks)
   ├── Configura Zsh como shell padrão
+  ├── Instala Tmux Plugin Manager (TPM)
   ├── Cria diretórios necessários
   ├── Copia wallpaper padrão
   ├── Habilita serviços (NetworkManager, Bluetooth, PipeWire)
+  ├── Valida instalação (pacotes críticos + symlinks)
   └── Pronto! Só dar reboot.
 ```
 
@@ -187,14 +224,19 @@ dotfiles/
 │           ├── menu-live          # Menu interativo no boot
 │           ├── instalar-sistema   # Wrapper do instalador
 │           └── full-install.sh    # Instalação completa do Arch
-├── hypr/                   # Hyprland, Hyprlock, scripts
+├── hypr/                   # Hyprland, Hyprlock, Hypridle, scripts
 ├── waybar/                 # Barra de status + scripts
 ├── wofi/                   # Launcher config + estilo
+├── rofi/                   # Launcher alternativo + wallpaper picker
 ├── wlogout/                # Menu de logout + ícones
-├── ghostty/                # Config do terminal
+├── ghostty/                # Config do terminal Ghostty
+├── kitty/                  # Config do terminal Kitty
+├── swaync/                 # Central de notificações
 ├── zsh/                    # .zshrc com zinit e prompt custom
+├── tmux/                   # Multiplexador de terminal + plugins
+├── git/                    # Configuração global do Git
 ├── nvim/                   # Neovim com NvChad
-├── vscode/                 # Settings e keybindings
+├── vscode/                 # Settings e keybindings do VS Code
 ├── gtk-3.0/                # Tema GTK escuro
 └── wallpapers/             # Wallpaper padrão
 ```
