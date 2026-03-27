@@ -16,6 +16,19 @@ autoload -U colors && colors
 autoload -Uz add-zsh-hook
 setopt prompt_subst interactive_comments
 
+# histórico
+HISTSIZE=10000
+SAVEHIST=$HISTSIZE
+HISTFILE=~/.zsh_history
+HISTDUP=erase
+setopt appendhistory
+setopt sharehistory
+setopt hist_ignore_space
+setopt hist_ignore_all_dups
+setopt hist_save_no_dups
+setopt hist_ignore_dups
+setopt hist_find_no_dups
+
 typeset -g PWD_PROMPT=""
 typeset -g GIT_PROMPT=""
 typeset -g ARROW_PROMPT=$'%{\e[1m\e[38;2;20;184;166m%}→%{\e[0m%}'
