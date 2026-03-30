@@ -244,6 +244,50 @@ trap 'kill $SUDO_KEEPALIVE_PID 2>/dev/null' EXIT
 success "Pré-requisitos validados."
 
 # ============================================================
+# 1.5. Perguntar sobre configurações opcionais
+# ============================================================
+
+info "Configurações opcionais..."
+
+INSTALL_VSCODE=false
+echo ""
+echo -e "${BOLD}Deseja instalar as configurações do VS Code?${NC}"
+echo -e "  (inclui instalação do pacote e atalhos/settings personalizados)"
+read -rp "$(echo -e "${BOLD}[s/N]:${NC} ")" vscode_choice
+if [[ "${vscode_choice,,}" =~ ^(s|sim|y|yes)$ ]]; then
+    INSTALL_VSCODE=true
+    success "VS Code será instalado e configurado."
+else
+    info "VS Code será pulado."
+fi
+
+INSTALL_JAVA=false
+echo ""
+echo -e "${BOLD}Deseja instalar o ambiente de desenvolvimento Java?${NC}"
+echo -e "  (inclui JDK 21 e Maven)"
+read -rp "$(echo -e "${BOLD}[s/N]:${NC} ")" java_choice
+if [[ "${java_choice,,}" =~ ^(s|sim|y|yes)$ ]]; then
+    INSTALL_JAVA=true
+    success "Java (JDK 21 + Maven) será instalado."
+else
+    info "Java será pulado."
+fi
+
+INSTALL_NVIM=false
+echo ""
+echo -e "${BOLD}Deseja instalar as configurações do Neovim?${NC}"
+echo -e "  (inclui instalação do pacote e configs personalizadas)"
+read -rp "$(echo -e "${BOLD}[s/N]:${NC} ")" nvim_choice
+if [[ "${nvim_choice,,}" =~ ^(s|sim|y|yes)$ ]]; then
+    INSTALL_NVIM=true
+    success "Neovim será instalado e configurado."
+else
+    info "Neovim será pulado."
+fi
+
+echo ""
+
+# ============================================================
 # 2. Inicializar keyring e atualizar sistema
 # ============================================================
 
@@ -413,8 +457,6 @@ PACMAN_PKGS=(
     github-cli
     # Notificações (notify-send)
     libnotify
-    # Editor
-    neovim
     # Terminal
     kitty
     # Night mode
@@ -433,6 +475,14 @@ PACMAN_PKGS=(
     pacman-contrib
 )
 
+if [ "$INSTALL_NVIM" = true ]; then
+    PACMAN_PKGS+=(neovim)
+fi
+
+if [ "$INSTALL_JAVA" = true ]; then
+    PACMAN_PKGS+=(jdk21-openjdk maven)
+fi
+
 retry "Instalar pacotes pacman" sudo pacman -S --needed --noconfirm "${PACMAN_PKGS[@]}"
 success "Pacotes pacman instalados."
 
@@ -440,12 +490,15 @@ info "Instalando pacotes via yay (AUR)..."
 
 AUR_PKGS=(
     ghostty
-    visual-studio-code-bin
     bibata-cursor-theme
     ttf-jetbrains-mono-nerd
     wlogout
     networkmanager-dmenu-git
 )
+
+if [ "$INSTALL_VSCODE" = true ]; then
+    AUR_PKGS+=(visual-studio-code-bin)
+fi
 
 # AUR: instalar um por um com fallback (se um falhar, os outros continuam)
 AUR_FAILED=()
@@ -507,11 +560,17 @@ STOW_PACKAGES=(
     swaync
     zsh
     gtk-3.0
-    nvim
-    vscode
     tmux
     git
 )
+
+if [ "$INSTALL_NVIM" = true ]; then
+    STOW_PACKAGES+=(nvim)
+fi
+
+if [ "$INSTALL_VSCODE" = true ]; then
+    STOW_PACKAGES+=(vscode)
+fi
 
 # Backup e remoção de configs conflitantes
 for pkg in "${STOW_PACKAGES[@]}"; do
