@@ -2,99 +2,122 @@
 @import "colors.rasi"
 
 configuration {
-    font: "JetBrainsMono Nerd Font 10";
-    show-icons: true;
+    font:                        "JetBrainsMono Nerd Font 12";
+    show-icons:                  true;
+    hover-select:                true;
+    me-select-entry:             "MouseSecondary";
+    me-accept-entry:             "MousePrimary";
 }
 
 window {
-    transparency:      "real";
-    location:          center;
-    anchor:            center;
-    fullscreen:        false;
-    width:             500px;
-    height:            600px;
-    border:            2px solid;
-    border-color:      @outline-variant;
-    border-radius:     15px;
-    background-color:  @surface;
+    enabled:                     true;
+    fullscreen:                  false;
+    transparency:                "real";
+    cursor:                      "default";
+    spacing:                     0px;
+    border-radius:               10px;
+    location:                    center;
+    anchor:                      center;
+    width:                       85%;
+    background-color:            rgba(26, 27, 38, 0.3);
+    border:                      0px;
 }
 
 mainbox {
-    enabled:           true;
-    spacing:           10px;
-    padding:           12px;
-    background-color:  transparent;
-    orientation:       vertical;
-    children:          [ "inputbar", "listview" ];
+    enabled:                     true;
+    children:                    [ "inputbar", "listview" ];
+    background-color:            transparent;
 }
 
 inputbar {
-    enabled:           true;
-    spacing:           10px;
-    padding:           12px;
-    border-radius:     10px;
-    background-color:  @surface-container;
-    text-color:        @on-surface;
-    children:          [ "textbox-prompt-colon", "entry" ];
-}
-
-textbox-prompt-colon {
-    enabled:           true;
-    expand:            false;
-    str:               " ";
-    background-color:  inherit;
-    text-color:        inherit;
+    enabled:                     true;
+    background-color:            transparent;
+    padding:                     0px;
+    margin:                      0px;
+    children:                    [ "entry" ];
 }
 
 entry {
-    enabled:           true;
-    background-color:  inherit;
-    text-color:        inherit;
-    cursor:            text;
-    placeholder:       "Buscar wallpaper...";
-    placeholder-color: @outline;
+    enabled:                     true;
+    padding:                     0px;
+    text-color:                  transparent;
+    background-color:            transparent;
+    placeholder:                 "";
 }
 
 listview {
-    enabled:           true;
-    columns:           1;
-    lines:             5;
-    cycle:             true;
-    dynamic:           true;
-    scrollbar:         false;
-    layout:            vertical;
-    fixed-height:      true;
-    spacing:           8px;
-    background-color:  transparent;
-    text-color:        @on-surface;
+    enabled:                     true;
+    columns:                     5;
+    lines:                       1;
+    padding:                     0px 36px 26px 36px;
+    cycle:                       true;
+    dynamic:                     true;
+    scrollbar:                   false;
+    layout:                      vertical;
+    reverse:                     false;
+    fixed-height:                true;
+    fixed-columns:               true;
+    background-color:            transparent;
+    spacing:                     20px;
+    border:                      0px;
 }
 
 element {
-    enabled:           true;
-    spacing:           15px;
-    padding:           8px;
-    border-radius:     8px;
-    background-color:  transparent;
-    text-color:        @on-surface;
-    cursor:            pointer;
+    enabled:                     true;
+    orientation:                 vertical;
+    expand:                      false;
+    spacing:                     0px;
+    padding:                     0px;
+    margin:                      0px;
+    border-radius:               12px;
+    cursor:                      pointer;
+    background-color:            transparent;
+    border:                      2px;
+    border-color:                transparent;
+}
+
+element normal.normal {
+    background-color:            #00000033;
+}
+
+element normal.urgent {
+    background-color:            #00000000;
+}
+
+element normal.active {
+    background-color:            #00000000;
 }
 
 element selected.normal {
-    background-color:  @primary-container;
-    text-color:        @on-primary-container;
+    background-color:            #ffffff10;
+    border:                      2px;
+    border-color:                @tertiary;
+    border-radius:               12px;
+}
+
+element alternate.normal {
+    background-color:            #00000033;
+}
+
+element alternate.urgent {
+    background-color:            #00000000;
+}
+
+element alternate.active {
+    background-color:            #00000000;
 }
 
 element-icon {
-    background-color:  transparent;
-    size:              120px;
-    cursor:            inherit;
-    border-radius:     6px;
+    size:                        400px;
+    cursor:                      inherit;
+    expand:                      true;
+    padding:                     0px;
+    horizontal-align:            0.5;
+    vertical-align:              0.5;
+    border-radius:               10px;
+    background-color:            transparent;
 }
 
 element-text {
-    background-color:  transparent;
-    text-color:        inherit;
-    cursor:            inherit;
-    vertical-align:    0.5;
-    horizontal-align:  0.0;
+    enabled:                     false;
 }
