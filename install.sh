@@ -293,6 +293,18 @@ else
     info "Neovim será pulado."
 fi
 
+INSTALL_QYLOCK=false
+echo ""
+echo -e "${BOLD}Deseja configurar o lockscreen Quickshell e tema SDDM?${NC}"
+echo -e "  (inclui lockscreen animado com temas e tema visual para a tela de login)"
+read -rp "$(echo -e "${BOLD}[s/N]:${NC} ")" qylock_choice
+if [[ "${qylock_choice,,}" =~ ^(s|sim|y|yes)$ ]]; then
+    INSTALL_QYLOCK=true
+    success "Quickshell lockscreen e SDDM serão configurados interativamente."
+else
+    info "Quickshell lockscreen será instalado com tema padrão (tui/Amethyst)."
+fi
+
 echo ""
 
 # ============================================================
