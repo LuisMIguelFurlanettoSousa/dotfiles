@@ -248,8 +248,11 @@ success "Pré-requisitos validados."
 # ============================================================
 
 info "Inicializando submódulos git..."
-git -C "$DOTFILES_DIR" submodule update --init >> "$LOG_FILE" 2>&1
-success "Submódulos inicializados."
+if retry "Inicializar submódulos git" git -C "$DOTFILES_DIR" submodule update --init; then
+    success "Submódulos inicializados."
+else
+    warn "Falha ao inicializar submódulos. O lockscreen Quickshell pode não funcionar."
+fi
 
 # ============================================================
 # 1.5. Perguntar sobre configurações opcionais
@@ -731,18 +734,22 @@ else
     if [ "$INSTALL_QYLOCK" = true ]; then
         # Setup interativo — usuário escolhe temas
         info "Configurando Quickshell lockscreen (interativo)..."
-        if bash "$QYLOCK_DIR/quickshell.sh"; then
+        if bash "$QYLOCK_DIR/quickshell.sh" 2>> "$LOG_FILE"; then
             success "Quickshell lockscreen configurado."
         else
             warn "Setup do lockscreen falhou. Aplicando tema padrão..."
             INSTALL_QYLOCK=false
         fi
 
-        info "Configurando tema SDDM (interativo)..."
-        if bash "$QYLOCK_DIR/sddm.sh"; then
-            success "Tema SDDM configurado."
-        else
-            warn "Setup do SDDM falhou. Verifique o log."
+        # Só roda SDDM interativo se lockscreen interativo teve sucesso
+        if [ "$INSTALL_QYLOCK" = true ]; then
+            info "Configurando tema SDDM (interativo)..."
+            if bash "$QYLOCK_DIR/sddm.sh" 2>> "$LOG_FILE"; then
+                success "Tema SDDM configurado."
+            else
+                warn "Setup do SDDM falhou. Aplicando tema padrão..."
+                INSTALL_QYLOCK=false
+            fi
         fi
     fi
 
@@ -750,22 +757,29 @@ else
         # Setup silencioso com tema padrão tui/Amethyst
         info "Instalando lockscreen com tema padrão (tui/Amethyst)..."
 
-        rm -rf "$LOCKSCREEN_TARGET"
-        cp -r "$QYLOCK_DIR/quickshell-lockscreen" "$LOCKSCREEN_TARGET"
-        ln -sfn "$QYLOCK_DIR/themes" "$LOCKSCREEN_TARGET/themes_link"
-        chmod +x "$LOCKSCREEN_TARGET/lock.sh"
-        sed -i 's|export QS_THEME=.*$|export QS_THEME="${1:-tui/Amethyst}"|' "$LOCKSCREEN_TARGET/lock.sh"
-        success "Lockscreen configurado com tema tui/Amethyst."
+        if [ ! -d "$QYLOCK_DIR/quickshell-lockscreen" ]; then
+            warn "Diretório quickshell-lockscreen não encontrado no submódulo."
+        else
+            rm -rf "$LOCKSCREEN_TARGET"
+            cp -r "$QYLOCK_DIR/quickshell-lockscreen" "$LOCKSCREEN_TARGET"
+            ln -sfn "$QYLOCK_DIR/themes" "$LOCKSCREEN_TARGET/themes_link"
+            chmod +x "$LOCKSCREEN_TARGET/lock.sh"
+            sed -i 's|export QS_THEME=.*$|export QS_THEME="${1:-tui/Amethyst}"|' "$LOCKSCREEN_TARGET/lock.sh"
+            success "Lockscreen configurado com tema tui/Amethyst."
+        fi
 
         info "Instalando tema SDDM padrão (tui/Amethyst)..."
-        sudo mkdir -p /usr/share/sddm/themes
-        sudo cp -r "$QYLOCK_DIR/themes/tui/Amethyst" /usr/share/sddm/themes/
-        if [ -d "$QYLOCK_DIR/themes/tui/tui-fonts" ]; then
-            sudo cp -r "$QYLOCK_DIR/themes/tui/tui-fonts" /usr/share/sddm/themes/
+        sudo mkdir -p /usr/share/sddm/themes >> "$LOG_FILE" 2>&1
+        if sudo cp -r "$QYLOCK_DIR/themes/tui/Amethyst" /usr/share/sddm/themes/ >> "$LOG_FILE" 2>&1; then
+            if [ -d "$QYLOCK_DIR/themes/tui/tui-fonts" ]; then
+                sudo cp -r "$QYLOCK_DIR/themes/tui/tui-fonts" /usr/share/sddm/themes/ >> "$LOG_FILE" 2>&1
+            fi
+            sudo mkdir -p /etc/sddm.conf.d >> "$LOG_FILE" 2>&1
+            echo -e "[Theme]\nCurrent=Amethyst" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null 2>> "$LOG_FILE"
+            success "Tema SDDM configurado (tui/Amethyst)."
+        else
+            warn "Falha ao copiar tema SDDM. Verifique permissões e o log."
         fi
-        sudo mkdir -p /etc/sddm.conf.d
-        echo -e "[Theme]\nCurrent=Amethyst" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
-        success "Tema SDDM configurado (tui/Amethyst)."
     fi
 fi
 
