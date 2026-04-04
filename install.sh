@@ -718,6 +718,58 @@ else
 fi
 
 # ============================================================
+# 12.5. Configurar Quickshell lockscreen e tema SDDM
+# ============================================================
+
+QYLOCK_DIR="$DOTFILES_DIR/qylock"
+LOCKSCREEN_TARGET="$HOME/.local/share/quickshell-lockscreen"
+
+if [ ! -d "$QYLOCK_DIR/themes" ]; then
+    warn "Diretório qylock/themes não encontrado. Submódulo pode não ter sido inicializado."
+    warn "Execute: git -C $DOTFILES_DIR submodule update --init"
+else
+    if [ "$INSTALL_QYLOCK" = true ]; then
+        # Setup interativo — usuário escolhe temas
+        info "Configurando Quickshell lockscreen (interativo)..."
+        if bash "$QYLOCK_DIR/quickshell.sh"; then
+            success "Quickshell lockscreen configurado."
+        else
+            warn "Setup do lockscreen falhou. Aplicando tema padrão..."
+            INSTALL_QYLOCK=false
+        fi
+
+        info "Configurando tema SDDM (interativo)..."
+        if bash "$QYLOCK_DIR/sddm.sh"; then
+            success "Tema SDDM configurado."
+        else
+            warn "Setup do SDDM falhou. Verifique o log."
+        fi
+    fi
+
+    if [ "$INSTALL_QYLOCK" = false ]; then
+        # Setup silencioso com tema padrão tui/Amethyst
+        info "Instalando lockscreen com tema padrão (tui/Amethyst)..."
+
+        rm -rf "$LOCKSCREEN_TARGET"
+        cp -r "$QYLOCK_DIR/quickshell-lockscreen" "$LOCKSCREEN_TARGET"
+        ln -sfn "$QYLOCK_DIR/themes" "$LOCKSCREEN_TARGET/themes_link"
+        chmod +x "$LOCKSCREEN_TARGET/lock.sh"
+        sed -i 's|export QS_THEME=.*$|export QS_THEME="${1:-tui/Amethyst}"|' "$LOCKSCREEN_TARGET/lock.sh"
+        success "Lockscreen configurado com tema tui/Amethyst."
+
+        info "Instalando tema SDDM padrão (tui/Amethyst)..."
+        sudo mkdir -p /usr/share/sddm/themes
+        sudo cp -r "$QYLOCK_DIR/themes/tui/Amethyst" /usr/share/sddm/themes/
+        if [ -d "$QYLOCK_DIR/themes/tui/tui-fonts" ]; then
+            sudo cp -r "$QYLOCK_DIR/themes/tui/tui-fonts" /usr/share/sddm/themes/
+        fi
+        sudo mkdir -p /etc/sddm.conf.d
+        echo -e "[Theme]\nCurrent=Amethyst" | sudo tee /etc/sddm.conf.d/theme.conf > /dev/null
+        success "Tema SDDM configurado (tui/Amethyst)."
+    fi
+fi
+
+# ============================================================
 # 13. Habilitar serviços
 # ============================================================
 
