@@ -244,6 +244,14 @@ trap 'kill $SUDO_KEEPALIVE_PID 2>/dev/null' EXIT
 success "Pré-requisitos validados."
 
 # ============================================================
+# 1.1. Inicializar submódulos git
+# ============================================================
+
+info "Inicializando submódulos git..."
+git -C "$DOTFILES_DIR" submodule update --init >> "$LOG_FILE" 2>&1
+success "Submódulos inicializados."
+
+# ============================================================
 # 1.5. Perguntar sobre configurações opcionais
 # ============================================================
 
