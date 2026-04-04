@@ -1,0 +1,3 @@
+[submodule "qylock"]
+	path = qylock
+	url = https://github.com/LuisMIguelFurlanettoSousa/qylock.git
