@@ -1,0 +1,123 @@
+@theme "/dev/null"
+@import "colors.rasi"
+
+configuration {
+    font:                        "JetBrainsMono Nerd Font 12";
+    show-icons:                  true;
+    hover-select:                true;
+    me-select-entry:             "MouseSecondary";
+    me-accept-entry:             "MousePrimary";
+}
+
+window {
+    enabled:                     true;
+    fullscreen:                  false;
+    transparency:                "real";
+    cursor:                      "default";
+    spacing:                     0px;
+    border-radius:               10px;
+    location:                    center;
+    anchor:                      center;
+    width:                       85%;
+    background-color:            rgba(26, 27, 38, 0.3);
+    border:                      0px;
+}
+
+mainbox {
+    enabled:                     true;
+    children:                    [ "inputbar", "listview" ];
+    background-color:            transparent;
+}
+
+inputbar {
+    enabled:                     true;
+    background-color:            transparent;
+    padding:                     0px;
+    margin:                      0px;
+    children:                    [ "entry" ];
+}
+
+entry {
+    enabled:                     true;
+    padding:                     0px;
+    text-color:                  transparent;
+    background-color:            transparent;
+    placeholder:                 "";
+}
+
+listview {
+    enabled:                     true;
+    columns:                     5;
+    lines:                       1;
+    padding:                     0px 36px 26px 36px;
+    cycle:                       true;
+    dynamic:                     true;
+    scrollbar:                   false;
+    layout:                      vertical;
+    reverse:                     false;
+    fixed-height:                true;
+    fixed-columns:               true;
+    background-color:            transparent;
+    spacing:                     20px;
+    border:                      0px;
+}
+
+element {
+    enabled:                     true;
+    orientation:                 vertical;
+    expand:                      false;
+    spacing:                     0px;
+    padding:                     0px;
+    margin:                      0px;
+    border-radius:               12px;
+    cursor:                      pointer;
+    background-color:            transparent;
+    border:                      2px;
+    border-color:                transparent;
+}
+
+element normal.normal {
+    background-color:            #00000033;
+}
+
+element normal.urgent {
+    background-color:            #00000000;
+}
+
+element normal.active {
+    background-color:            #00000000;
+}
+
+element selected.normal {
+    background-color:            #ffffff10;
+    border:                      2px;
+    border-color:                @tertiary;
+    border-radius:               12px;
+}
+
+element alternate.normal {
+    background-color:            #00000033;
+}
+
+element alternate.urgent {
+    background-color:            #00000000;
+}
+
+element alternate.active {
+    background-color:            #00000000;
+}
+
+element-icon {
+    size:                        400px;
+    cursor:                      inherit;
+    expand:                      true;
+    padding:                     0px;
+    horizontal-align:            0.5;
+    vertical-align:              0.5;
+    border-radius:               10px;
+    background-color:            transparent;
+}
+
+element-text {
+    enabled:                     false;
+}
