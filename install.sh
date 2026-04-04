@@ -783,7 +783,7 @@ else
     SYSTEMCTL_FLAG="enable --now"
 fi
 
-for svc in NetworkManager bluetooth; do
+for svc in NetworkManager bluetooth sddm; do
     if sudo systemctl $SYSTEMCTL_FLAG "$svc" >> "$LOG_FILE" 2>&1; then
         success "  $svc habilitado."
     else
@@ -810,7 +810,7 @@ fi
 
 info "Validando instalação..."
 
-CRITICAL_PKGS=(hyprland waybar wofi kitty zsh stow tmux playerctl)
+CRITICAL_PKGS=(hyprland waybar wofi kitty zsh stow tmux playerctl quickshell)
 VALIDATION_FAILED=()
 
 for pkg in "${CRITICAL_PKGS[@]}"; do
@@ -830,6 +830,7 @@ CRITICAL_CONFIGS=(
     "$HOME/.zshrc"
     "$HOME/.tmux.conf"
     "$HOME/.gitconfig"
+    "$HOME/.local/share/quickshell-lockscreen/lock.sh"
 )
 
 for cfg in "${CRITICAL_CONFIGS[@]}"; do
